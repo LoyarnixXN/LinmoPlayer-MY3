@@ -12,22 +12,21 @@
         <div class="brand"><span class="brand-mark">L</span><span>Linmo</span></div>
         <div class="sidebar-label">菜单</div>
         <nav id="main-nav" class="main-nav" aria-label="主导航">
-          <button class="nav-item active" data-page="home"><span>⌂</span>首页</button>
-          <button class="nav-item" data-page="library"><span>♫</span>歌库</button>
-          <button class="nav-item" data-page="plugins"><span>◈</span>插件</button>
-          <button class="nav-item" data-page="settings"><span>⚙</span>设置</button>
+          <button class="nav-item active" data-page="home"><span class="nav-icon" data-icon="home" aria-hidden="true"></span>本地音乐</button>
+          <button class="nav-item" data-page="library"><span class="nav-icon" data-icon="library" aria-hidden="true"></span>音乐库</button>
+          <button class="nav-item" data-page="plugins"><span class="nav-icon" data-icon="plugins" aria-hidden="true"></span>插件中心</button>
+          <button class="nav-item" data-page="settings"><span class="nav-icon" data-icon="settings" aria-hidden="true"></span>应用设置</button>
         </nav>
-        <div class="sidebar-footer"><span class="status-dot"></span><span>仅本机</span></div>
       </aside>
-      <main class="main-content" id="main-content">
-        <div class="window-bar" aria-label="窗口控制栏">
-          <div class="window-drag-region"></div>
-          <div class="window-controls">
-            <button id="window-minimize" type="button" aria-label="最小化">−</button>
-            <button id="window-maximize" type="button" aria-label="最大化或还原">□</button>
-            <button id="window-close" class="window-close" type="button" aria-label="关闭">×</button>
-          </div>
+      <div class="window-bar" aria-label="窗口控制栏">
+        <div class="window-drag-region"></div>
+        <div class="window-controls">
+          <button id="window-minimize" type="button" aria-label="最小化"><span data-icon="minimize" aria-hidden="true"></span></button>
+          <button id="window-maximize" type="button" aria-label="最大化或还原"><span data-icon="maximize" aria-hidden="true"></span></button>
+          <button id="window-close" class="window-close" type="button" aria-label="关闭"><span data-icon="close" aria-hidden="true"></span></button>
         </div>
+      </div>
+      <main class="main-content" id="main-content">
         <header class="topbar"><div><div class="eyebrow">LINMO PLAYER</div><h1 id="page-subtitle">本地音乐</h1></div><div class="profile-wrap"><button class="avatar" id="profile-trigger" type="button" aria-label="打开账户菜单" aria-expanded="false">?</button><div class="profile-menu" id="profile-menu" hidden></div></div></header>
         <section id="page-home" class="page active"></section>
         <section id="page-library" class="page"></section>
@@ -35,6 +34,7 @@
         <section id="page-settings" class="page"></section>
         <div class="mini-player" id="mini-player"></div>
         <input id="audio-files" type="file" accept="audio/*" multiple hidden />
+        <input id="plugin-files" type="file" accept="application/json,.json" multiple hidden />
       </main>
     </div>
     <div class="scroll-rail" id="scroll-rail" role="scrollbar" aria-label="页面滚动条" aria-controls="main-content" hidden>
