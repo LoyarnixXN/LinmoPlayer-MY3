@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+.DS_Store
+*.log
+coverage/
+.env*
+plugins-local/*
+!plugins-local/.gitkeep
+!plugins-local/README.md

@@ -1,0 +1,28 @@
+{
+  "name": "@linmo/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:android": "eas build --platform android --profile preview"
+  },
+  "dependencies": {
+    "@linmo/core": "0.1.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~54.0.0",
+    "expo-audio": "~1.1.1",
+    "expo-document-picker": "~14.0.8",
+    "expo-status-bar": "~3.0.0",
+    "expo-system-ui": "~6.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.4",
+    "react-native-safe-area-context": "~5.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0"
+  }
+}
