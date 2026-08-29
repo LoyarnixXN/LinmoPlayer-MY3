@@ -1,0 +1,20 @@
+{
+  "name": "linmo-player",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Linmo Player: a mobile-first music player shell with a provider plugin boundary.",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format:check": "prettier --check .",
+    "start:android": "npm run start --workspace @linmo/mobile",
+    "build:android": "npm run build:android --workspace @linmo/mobile",
+    "start:windows": "npm run start --workspace @linmo/desktop",
+    "build:windows": "npm run build --workspace @linmo/desktop"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}

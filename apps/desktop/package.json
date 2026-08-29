@@ -1,0 +1,16 @@
+{
+  "name": "@linmo/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Linmo Player Windows desktop shell.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir --win --x64",
+    "build": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "37.10.3",
+    "electron-builder": "^26.0.12"
+  }
+}

@@ -1,0 +1,21 @@
+appId: com.linmo.player
+productName: Linmo Player
+artifactName: Linmo-Player-${version}-${arch}.${ext}
+directories:
+  output: ../../dist/windows
+  buildResources: build
+files:
+  - main.cjs
+  - preload.cjs
+  - renderer/**
+win:
+  target:
+    - nsis
+    - portable
+  executableName: LinmoPlayer
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+portable:
+  artifactName: Linmo-Player-${version}-portable.${ext}

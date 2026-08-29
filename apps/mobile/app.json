@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Linmo Player",
+    "slug": "linmo-player",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "linmo",
+    "android": {
+      "package": "com.linmo.player",
+      "versionCode": 1,
+      "permissions": []
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-audio"
+    ]
+  }
+}
