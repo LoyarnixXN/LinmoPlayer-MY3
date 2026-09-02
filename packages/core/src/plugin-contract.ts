@@ -10,13 +10,20 @@ import type {
 
 export const HOST_API_VERSION = '1';
 
+/** What a plugin package provides. The host executes every kind with built-in engines. */
+export type PluginKind = 'music-source' | 'theme' | 'font';
+
 export type PluginCapability =
-  | 'search'
-  | 'playback'
-  | 'lyrics'
-  | 'playlists'
-  | 'account'
-  | 'recommendations';
+  'search' | 'playback' | 'lyrics' | 'playlists' | 'account' | 'recommendations';
+
+export const PLUGIN_CAPABILITIES: readonly PluginCapability[] = [
+  'search',
+  'playback',
+  'lyrics',
+  'playlists',
+  'account',
+  'recommendations',
+];
 
 export type SearchType = 'song' | 'album' | 'artist' | 'playlist';
 
@@ -25,6 +32,9 @@ export interface PluginManifest {
   readonly name: string;
   readonly version: string;
   readonly hostApiVersion: string;
+  readonly kind?: PluginKind;
+  readonly provider?: string;
+  readonly config?: Readonly<Record<string, unknown>>;
   readonly capabilities: readonly PluginCapability[];
   readonly description?: string;
   readonly iconDataUri?: string;
@@ -68,6 +78,13 @@ export interface PluginUser {
   readonly avatarUrl?: string;
 }
 
+export interface PluginLoginRequest {
+  readonly method: 'phone' | 'email';
+  readonly identifier: string;
+  readonly password: string;
+  readonly countryCode?: string;
+}
+
 export interface PluginContext {
   readonly sourceId: SourceId;
   readonly storage: PluginStorage;
@@ -88,9 +105,20 @@ export interface MusicPlugin {
   resolvePlayback?(song: UnifiedSong, quality: PlaybackQuality): Promise<PlaybackResource>;
   getLyrics?(song: UnifiedSong): Promise<LyricDocument>;
   listUserPlaylists?(): Promise<readonly PluginPlaylist[]>;
-  listPlaylistSongs?(playlist: PluginPlaylist, page: number, pageSize: number): Promise<SearchResponse>;
+  listPlaylistSongs?(
+    playlist: PluginPlaylist,
+    page: number,
+    pageSize: number,
+  ): Promise<SearchResponse>;
   getUser?(): Promise<PluginUser | null>;
+  login?(request: PluginLoginRequest): Promise<PluginUser>;
+  logout?(): Promise<void>;
+  isAuthenticated?(): Promise<boolean>;
   getRecommendations?(): Promise<readonly PluginSong[]>;
+  /** Sources exposed by a multi-source plugin, in fallback priority order. */
+  listSources?(): Promise<readonly string[]>;
+  /** Search one specific source of a multi-source plugin. */
+  searchSource?(source: string, request: SearchRequest): Promise<SearchResponse>;
 }
 
 export function sourceKey(sourceId: string, remoteId: string): string {

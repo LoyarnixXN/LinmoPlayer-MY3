@@ -43,3 +43,38 @@ export interface LyricDocument {
   readonly translatedLyric?: string;
   readonly synced: boolean;
 }
+
+/** Material 3 style color tokens a theme plugin may override. */
+export type ThemeColorToken =
+  | 'primary'
+  | 'onPrimary'
+  | 'primaryContainer'
+  | 'onPrimaryContainer'
+  | 'secondary'
+  | 'secondaryContainer'
+  | 'onSecondaryContainer'
+  | 'tertiaryContainer'
+  | 'onTertiaryContainer'
+  | 'surface'
+  | 'surfaceContainer'
+  | 'surfaceContainerHigh'
+  | 'surfaceContainerHighest'
+  | 'onSurface'
+  | 'onSurfaceVariant'
+  | 'outline'
+  | 'outlineVariant'
+  | 'error'
+  | 'scrim';
+
+export type ThemeColorOverrides = Readonly<Partial<Record<ThemeColorToken, string>>>;
+
+export interface ThemePayload {
+  readonly name: string;
+  readonly mode: 'light' | 'dark';
+  readonly colors: ThemeColorOverrides;
+}
+
+export interface FontPayload {
+  readonly family: string;
+  readonly displayName?: string;
+}

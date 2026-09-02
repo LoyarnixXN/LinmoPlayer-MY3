@@ -8,4 +8,10 @@ contextBridge.exposeInMainWorld('linmoDesktop', {
     toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
     close: () => ipcRenderer.send('window:close'),
   },
+  plugins: {
+    readPackage: (bytes) => ipcRenderer.invoke('plugin:read-package', bytes),
+    extractFiles: (bytes) => ipcRenderer.invoke('plugin:extract-files', bytes),
+  },
+  net: { fetch: (input) => ipcRenderer.invoke('net:fetch', input) },
+  library: { pickAudio: () => ipcRenderer.invoke('library:pick-audio') },
 });

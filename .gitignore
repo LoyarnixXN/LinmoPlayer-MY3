@@ -10,3 +10,5 @@ coverage/
 plugins-local/*
 !plugins-local/.gitkeep
 !plugins-local/README.md
+!plugins-local/netease-cloud-music/
+!plugins-local/netease-cloud-music/**
