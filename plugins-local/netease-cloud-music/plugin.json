@@ -1,0 +1,13 @@
+{
+  "packageVersion": 1,
+  "id": "netease.cloudmusic",
+  "name": "网易云音乐",
+  "version": "0.1.0",
+  "hostApiVersion": "1",
+  "kind": "music-source",
+  "provider": "netease-api",
+  "config": { "baseUrl": "http://127.0.0.1:3000" },
+  "capabilities": ["account", "playback", "playlists", "search"],
+  "description": "通过用户自托管的网易云音乐 API 代理登录、播放歌曲并同步用户歌单。",
+  "permissions": ["network", "secure-storage"]
+}

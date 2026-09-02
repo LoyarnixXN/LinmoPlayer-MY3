@@ -6,11 +6,17 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
+    "build:core": "esbuild ../../packages/core/src/index.ts --bundle --format=esm --platform=browser --outfile=renderer/vendor/linmo-core.js",
+    "build:renderer": "npm run build:core",
     "pack": "electron-builder --dir --win --x64",
     "build": "electron-builder --win --x64"
   },
   "devDependencies": {
+    "esbuild": "^0.25.9",
     "electron": "37.10.3",
     "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0"
   }
 }
