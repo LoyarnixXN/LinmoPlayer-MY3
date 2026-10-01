@@ -58,4 +58,32 @@ describe('plugin-package', () => {
     });
     assert.equal(manifest.kind, 'font');
   });
+
+  it('validates bundled service spec', () => {
+    const manifest = validatePluginPackageManifest({
+      ...validMusicSource,
+      id: 'demo-service',
+      service: { entry: 'service/server.mjs', port: 18765 },
+    });
+    assert.deepEqual(manifest.service, { entry: 'service/server.mjs', port: 18765 });
+  });
+
+  it('rejects invalid service ports and paths', () => {
+    assert.throws(
+      () =>
+        validatePluginPackageManifest({
+          ...validMusicSource,
+          service: { entry: 'service/server.mjs', port: 0 },
+        }),
+      /service\.port/,
+    );
+    assert.throws(
+      () =>
+        validatePluginPackageManifest({
+          ...validMusicSource,
+          service: { entry: '../escape.mjs', port: 3000 },
+        }),
+      /service\.entry/,
+    );
+  });
 });

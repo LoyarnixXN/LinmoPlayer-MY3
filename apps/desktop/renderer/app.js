@@ -321,7 +321,8 @@
         capabilities: [...new Set(capabilities)],
         provider: manifest.provider,
         ...manifest.config ? { config: manifest.config } : {},
-        ...typeof manifest.entry === "string" && isSafePackagePath(manifest.entry) ? { entry: manifest.entry } : {}
+        ...typeof manifest.entry === "string" && isSafePackagePath(manifest.entry) ? { entry: manifest.entry } : {},
+        ...manifest.service !== void 0 ? { service: validateServiceSpec(manifest.service) } : {}
       };
     }
     if (kind === "theme") {
@@ -352,6 +353,16 @@
   }
   function isSafePackagePath(value) {
     return value.length > 0 && value.length <= 240 && !value.startsWith("/") && !value.includes("\\") && !value.split("/").includes("..");
+  }
+  function validateServiceSpec(input) {
+    if (typeof input !== "object" || input === null || Array.isArray(input))
+      throw new Error("service \u5FC5\u987B\u662F\u5BF9\u8C61\u3002");
+    const raw = input;
+    if (typeof raw.entry !== "string" || !isSafePackagePath(raw.entry))
+      throw new Error("service.entry \u8DEF\u5F84\u975E\u6CD5\u3002");
+    if (raw.port === void 0 || !Number.isInteger(raw.port) || raw.port <= 0 || raw.port > 65535)
+      throw new Error("service.port \u5FC5\u987B\u662F 1-65535 \u7684\u6574\u6570\u3002");
+    return { entry: raw.entry, port: raw.port };
   }
   function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1281,6 +1292,20 @@
     const denied = ensurePermissions(meta);
     if (denied) return denied;
     try {
+      if (meta.service?.entry) {
+        const started = await window.linmoDesktop?.plugins?.startService?.({
+          pluginId: meta.id,
+          entry: meta.service.entry,
+          port: meta.service.port
+        });
+        if (started && started.ok === false) throw new Error(started.error ?? "\u6346\u7ED1\u670D\u52A1\u542F\u52A8\u5931\u8D25\u3002");
+        if (meta.service.port && !meta.config?.baseUrl) {
+          meta.config = {
+            ...meta.config ?? {},
+            baseUrl: `http://127.0.0.1:${meta.service.port}`
+          };
+        }
+      }
       const plugin = createMusicSourcePlugin(manifestOf(meta));
       const registered = registry.register(plugin);
       if (!registered.ok) throw new Error(registered.error);
@@ -1336,6 +1361,7 @@
     if (meta.kind === "music-source") {
       await registry.disable(pluginId).catch(() => void 0);
       registry.unregister(pluginId);
+      await window.linmoDesktop?.plugins?.stopService?.(pluginId).catch?.(() => void 0);
     }
     persisters.plugins();
     publish("plugins");
@@ -1349,6 +1375,7 @@
   }
   async function uninstallPlugin(pluginId) {
     await disablePlugin(pluginId);
+    await window.linmoDesktop?.plugins?.stopService?.(pluginId).catch?.(() => void 0);
     state.plugins = state.plugins.filter((plugin) => plugin.id !== pluginId);
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith(`linmo.pluginStorage.${pluginId}.`)) localStorage.removeItem(key);
@@ -3411,6 +3438,19 @@
     const meta = state.plugins.find((plugin) => plugin.id === pluginId);
     if (!meta) return;
     if (nextEnabled) {
+      const acked = localStorage.getItem("linmo.pluginRiskAck") === "1";
+      if (!acked) {
+        const confirmed = await confirmDialog(
+          "\u542F\u7528\u63D2\u4EF6",
+          "\u63D2\u4EF6\u7531\u7B2C\u4E09\u65B9\u63D0\u4F9B\uFF0C\u542F\u7528\u540E\u53EF\u80FD\u6309\u5176\u914D\u7F6E\u8FDE\u63A5\u5916\u90E8\u7F51\u7EDC\u670D\u52A1\u3002\u8BF7\u4EC5\u542F\u7528\u4F60\u4FE1\u4EFB\u6765\u6E90\u7684\u63D2\u4EF6\u3002",
+          "\u4ECD\u7136\u542F\u7528"
+        );
+        if (!confirmed) {
+          publish("plugins");
+          return;
+        }
+        localStorage.setItem("linmo.pluginRiskAck", "1");
+      }
       if (missingPermissions(meta.permissions, meta.grantedPermissions).length) {
         const granted = await grantPluginPermissions(pluginId);
         if (!granted) {
@@ -3991,6 +4031,23 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     menu.classList.remove("is-open");
     qs("#account-avatar")?.setAttribute("aria-expanded", "false");
   }
+  var RISK_ACK_KEY = "linmo.pluginRiskAck";
+  async function pluginRiskConfirm(kindLabel, name) {
+    const acknowledged = localStorage.getItem(RISK_ACK_KEY) === "1";
+    if (acknowledged) return true;
+    const confirmed = await openDialog({
+      eyebrow: kindLabel,
+      title: `\u5B89\u88C5\u300C${name}\u300D\uFF1F`,
+      body: `<p class="risk-text">\u63D2\u4EF6\u7531\u7B2C\u4E09\u65B9\u63D0\u4F9B\uFF0C\u542F\u7528\u540E\u53EF\u80FD\u6309\u5176\u914D\u7F6E\u8FDE\u63A5\u5916\u90E8\u7F51\u7EDC\u670D\u52A1\u3001\u83B7\u53D6\u5E76\u5C55\u793A\u7B2C\u4E09\u65B9\u5185\u5BB9\u3002\u8BF7\u4EC5\u5B89\u88C5\u4F60\u4FE1\u4EFB\u6765\u6E90\u7684\u63D2\u4EF6\u5305\uFF1B\u5B89\u88C5\u6216\u542F\u7528\u524D\u8BF7\u81EA\u884C\u786E\u8BA4\u5176\u6765\u6E90\u4E0E\u5185\u5BB9\u3002</p>
+      <label class="risk-ack"><input type="checkbox" id="risk-ack"/><span>\u6211\u5DF2\u4E86\u89E3\u98CE\u9669\uFF0C\u540C\u7C7B\u63D0\u793A\u4E0D\u518D\u663E\u793A</span></label>`,
+      confirmLabel: "\u4ECD\u7136\u5B89\u88C5",
+      cancelLabel: "\u53D6\u6D88",
+      danger: true
+    });
+    if (!confirmed) return false;
+    if (qs("#risk-ack", confirmed)?.checked) localStorage.setItem(RISK_ACK_KEY, "1");
+    return true;
+  }
   async function importPluginZip(file) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -4000,6 +4057,15 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
         throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u4E3B\u9898\u6587\u4EF6\uFF1A${manifest.theme.entry}`);
       if (manifest.kind === "font" && !installed.fileNames.includes(manifest.font.file))
         throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u5B57\u4F53\u6587\u4EF6\uFF1A${manifest.font.file}`);
+      if (manifest.service && !installed.fileNames.includes(manifest.service.entry))
+        throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u670D\u52A1\u5165\u53E3\u6587\u4EF6\uFF1A${manifest.service.entry}`);
+      const kindLabel = { "music-source": "MUSIC SOURCE", theme: "THEME", font: "FONT" }[manifest.kind];
+      const approved = await pluginRiskConfirm(kindLabel, manifest.name);
+      if (!approved) {
+        await window.linmoDesktop.plugins.uninstall(manifest.id).catch(() => void 0);
+        snackbar("\u5DF2\u53D6\u6D88\u5B89\u88C5");
+        return;
+      }
       const previous = state.plugins.find((plugin) => plugin.id === manifest.id);
       const meta = {
         ...manifest,

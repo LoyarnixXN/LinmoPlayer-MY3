@@ -31,6 +31,8 @@
 - [x] NeteaseCloudMusicApi 账号 provider
 - [x] 多源聚合搜索与播放补全
 - [x] 网易云扫码登录（内置声明式插件预置）
+- [x] 插件捆绑 Node 服务（启用启动 / 停用停止 / 端口探测）
+- [x] 示例插件与服务生命周期 e2e（`examples/plugins/*`、`tools/e2e-plugin-service.mjs`）
 
 ## Phase 4 — 多平台
 

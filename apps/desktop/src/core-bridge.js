@@ -45,6 +45,22 @@ async function startPlugin(meta) {
   const denied = ensurePermissions(meta);
   if (denied) return denied;
   try {
+    // Bundled service: start with the plugin; when baseUrl is not set, use the
+    // service port as the provider endpoint.
+    if (meta.service?.entry) {
+      const started = await window.linmoDesktop?.plugins?.startService?.({
+        pluginId: meta.id,
+        entry: meta.service.entry,
+        port: meta.service.port,
+      });
+      if (started && started.ok === false) throw new Error(started.error ?? '捆绑服务启动失败。');
+      if (meta.service.port && !meta.config?.baseUrl) {
+        meta.config = {
+          ...(meta.config ?? {}),
+          baseUrl: `http://127.0.0.1:${meta.service.port}`,
+        };
+      }
+    }
     const plugin = createMusicSourcePlugin(manifestOf(meta));
     const registered = registry.register(plugin);
     if (!registered.ok) throw new Error(registered.error);
@@ -104,6 +120,7 @@ export async function disablePlugin(pluginId) {
   if (meta.kind === 'music-source') {
     await registry.disable(pluginId).catch(() => undefined);
     registry.unregister(pluginId);
+    await window.linmoDesktop?.plugins?.stopService?.(pluginId).catch?.(() => undefined);
   }
   persisters.plugins();
   publish('plugins');
@@ -120,6 +137,7 @@ export async function bootPlugins() {
 
 export async function uninstallPlugin(pluginId) {
   await disablePlugin(pluginId);
+  await window.linmoDesktop?.plugins?.stopService?.(pluginId).catch?.(() => undefined);
   state.plugins = state.plugins.filter((plugin) => plugin.id !== pluginId);
   for (const key of Object.keys(localStorage)) {
     if (key.startsWith(`linmo.pluginStorage.${pluginId}.`)) localStorage.removeItem(key);

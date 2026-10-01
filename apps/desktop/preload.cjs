@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('linmoDesktop', {
     uninstall: (pluginId) => ipcRenderer.invoke('plugin:uninstall', pluginId),
     verifyIntegrity: (pluginId) => ipcRenderer.invoke('plugin:verify-integrity', pluginId),
     rollback: (pluginId) => ipcRenderer.invoke('plugin:rollback', pluginId),
+    startService: (input) => ipcRenderer.invoke('plugin:start-service', input),
+    stopService: (pluginId) => ipcRenderer.invoke('plugin:stop-service', pluginId),
   },
   net: { fetch: (input) => ipcRenderer.invoke('net:fetch', input) },
   library: {

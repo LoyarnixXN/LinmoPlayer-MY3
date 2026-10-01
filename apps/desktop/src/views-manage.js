@@ -265,6 +265,19 @@ async function togglePlugin(pluginId, nextEnabled) {
   const meta = state.plugins.find((plugin) => plugin.id === pluginId);
   if (!meta) return;
   if (nextEnabled) {
+    const acked = localStorage.getItem('linmo.pluginRiskAck') === '1';
+    if (!acked) {
+      const confirmed = await confirmDialog(
+        '启用插件',
+        '插件由第三方提供，启用后可能按其配置连接外部网络服务。请仅启用你信任来源的插件。',
+        '仍然启用',
+      );
+      if (!confirmed) {
+        publish('plugins');
+        return;
+      }
+      localStorage.setItem('linmo.pluginRiskAck', '1');
+    }
     if (missingPermissions(meta.permissions, meta.grantedPermissions).length) {
       const granted = await grantPluginPermissions(pluginId);
       if (!granted) {

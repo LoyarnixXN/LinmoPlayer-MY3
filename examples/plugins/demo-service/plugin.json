@@ -1,0 +1,16 @@
+{
+  "packageVersion": 1,
+  "id": "demo-service",
+  "name": "Demo Service",
+  "version": "1.0.0",
+  "hostApiVersion": "1",
+  "kind": "music-source",
+  "provider": "gdstudio",
+  "capabilities": ["search", "playback"],
+  "permissions": ["network"],
+  "service": {
+    "entry": "service/server.mjs",
+    "port": 18765
+  },
+  "description": "测试用捆绑服务插件：启用时启动本地 Node 服务，宿主以 service.port 作为默认代理地址。"
+}

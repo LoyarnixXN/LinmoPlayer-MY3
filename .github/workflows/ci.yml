@@ -26,6 +26,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Plugin service e2e
+        run: node tools/e2e-plugin-service.mjs
+
       - name: Format check
         run: npm run format:check
 

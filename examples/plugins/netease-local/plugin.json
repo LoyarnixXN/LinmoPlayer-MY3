@@ -1,0 +1,16 @@
+{
+  "packageVersion": 1,
+  "id": "netease-local",
+  "name": "网易云本地服务",
+  "version": "1.0.0",
+  "hostApiVersion": "1",
+  "kind": "music-source",
+  "provider": "netease-api",
+  "capabilities": ["search", "playback", "lyrics", "playlists", "account", "recommendations"],
+  "permissions": ["network", "secure-storage"],
+  "service": {
+    "entry": "service/server.mjs",
+    "port": 3000
+  },
+  "description": "网易云音源插件（捆绑服务模式）：随插件启动本地代理服务；若已运行 NeteaseCloudMusicApi，也可在设置中覆盖 baseUrl。"
+}

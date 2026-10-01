@@ -20,7 +20,15 @@ import { renderPlugins, renderSettings } from './views-manage.js';
 import { initPlayerView, renderMiniPlayer } from './views-player.js';
 import { initOnboarding } from './onboarding.js';
 import { loginDialog, createPlaylistDialog, renamePlaylistDialog } from './dialogs.js';
-import { installRipple, qs, qsa, snackbar, escapeHtml, installImageErrorFallback } from './ui.js';
+import {
+  installRipple,
+  qs,
+  qsa,
+  snackbar,
+  escapeHtml,
+  installImageErrorFallback,
+  openDialog,
+} from './ui.js';
 import { icon } from './icons.js';
 
 const PAGE_TITLES = {
@@ -157,6 +165,26 @@ function closeAccountMenu() {
 
 /* ---------------- plugin import ---------------- */
 
+const RISK_ACK_KEY = 'linmo.pluginRiskAck';
+
+/** Third-party plugin risk notice shown at import and first enable. */
+async function pluginRiskConfirm(kindLabel, name) {
+  const acknowledged = localStorage.getItem(RISK_ACK_KEY) === '1';
+  if (acknowledged) return true;
+  const confirmed = await openDialog({
+    eyebrow: kindLabel,
+    title: `安装「${name}」？`,
+    body: `<p class="risk-text">插件由第三方提供，启用后可能按其配置连接外部网络服务、获取并展示第三方内容。请仅安装你信任来源的插件包；安装或启用前请自行确认其来源与内容。</p>
+      <label class="risk-ack"><input type="checkbox" id="risk-ack"/><span>我已了解风险，同类提示不再显示</span></label>`,
+    confirmLabel: '仍然安装',
+    cancelLabel: '取消',
+    danger: true,
+  });
+  if (!confirmed) return false;
+  if (qs('#risk-ack', confirmed)?.checked) localStorage.setItem(RISK_ACK_KEY, '1');
+  return true;
+}
+
 async function importPluginZip(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -166,6 +194,17 @@ async function importPluginZip(file) {
       throw new Error(`插件缺少主题文件：${manifest.theme.entry}`);
     if (manifest.kind === 'font' && !installed.fileNames.includes(manifest.font.file))
       throw new Error(`插件缺少字体文件：${manifest.font.file}`);
+    if (manifest.service && !installed.fileNames.includes(manifest.service.entry))
+      throw new Error(`插件缺少服务入口文件：${manifest.service.entry}`);
+    const kindLabel = { 'music-source': 'MUSIC SOURCE', theme: 'THEME', font: 'FONT' }[
+      manifest.kind
+    ];
+    const approved = await pluginRiskConfirm(kindLabel, manifest.name);
+    if (!approved) {
+      await window.linmoDesktop.plugins.uninstall(manifest.id).catch(() => undefined);
+      snackbar('已取消安装');
+      return;
+    }
     const previous = state.plugins.find((plugin) => plugin.id === manifest.id);
     const meta = {
       ...manifest,

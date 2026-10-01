@@ -1480,6 +1480,25 @@ h4 {
   color: var(--m3-on-surface-variant);
 }
 
+.risk-text {
+  color: var(--m3-on-surface);
+  line-height: 1.55;
+}
+
+.risk-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.risk-ack span {
+  font-size: 13px;
+  color: var(--m3-on-surface-variant);
+}
+
 .plugin-config,
 .plugin-error {
   display: flex;
