@@ -45,6 +45,15 @@
   font-display: swap;
 }
 
+/* Material Symbols Rounded — local full icon set (FILL=0 / wght=400 instance). */
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  src: url('./fonts/MaterialSymbolsRounded.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
   --m3-primary: #6750a4;
   --m3-on-primary: #ffffff;
@@ -78,6 +87,12 @@
   --easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --duration-medium: 260ms;
   --duration-long: 340ms;
+  --icon-xs: 14px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --icon-xl: 32px;
+  --icon-2xl: 44px;
 
   color-scheme: light;
 }
@@ -168,15 +183,35 @@ p {
   margin: 0;
 }
 
-.ui-icon {
-  display: block;
+.ui-icon,
+.msi {
+  font-family: 'Material Symbols Rounded';
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
   width: 1em;
   height: 1em;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  font-size: var(--icon-md);
+  color: inherit;
+  flex: none;
 }
 
 ::-webkit-scrollbar {
@@ -333,8 +368,7 @@ h4 {
 }
 
 .nav-icon .ui-icon {
-  width: 21px;
-  height: 21px;
+  font-size: var(--icon-md);
 }
 
 .nav-item.is-active {
@@ -398,8 +432,7 @@ h4 {
 }
 
 .window-controls .ui-icon {
-  width: 14px;
-  height: 14px;
+  font-size: var(--icon-xs);
 }
 
 /* ---------------- top bar ---------------- */
@@ -446,8 +479,7 @@ h4 {
 }
 
 .icon-button .ui-icon {
-  width: 20px;
-  height: 20px;
+  font-size: var(--icon-md);
 }
 
 .avatar {
@@ -463,8 +495,7 @@ h4 {
 }
 
 .avatar .ui-icon {
-  width: 19px;
-  height: 19px;
+  font-size: var(--icon-sm);
 }
 
 .avatar img {
@@ -724,14 +755,12 @@ h4 {
 
 .button-icon,
 .row-icon {
-  width: 17px;
-  height: 17px;
+  font-size: var(--icon-sm);
   flex: none;
 }
 
 .row-icon {
-  width: 15px;
-  height: 15px;
+  font-size: 15px;
 }
 
 .small {
@@ -882,6 +911,7 @@ h4 {
   color: var(--m3-on-primary-container);
   overflow: hidden;
   position: relative;
+  container-type: size;
 }
 
 .cover-fallback,
@@ -923,14 +953,15 @@ h4 {
 }
 
 .cover.large .ui-icon {
-  width: 36%;
-  height: 36%;
+  width: 36cqw;
+  height: 36cqw;
+  font-size: 36cqw;
 }
 
 .cover .ui-icon {
-  width: 48%;
-  height: 48%;
-  stroke-width: 1.8;
+  width: 48cqw;
+  height: 48cqw;
+  font-size: 48cqw;
 }
 
 /* ---------------- song rows ---------------- */
@@ -1337,9 +1368,7 @@ h4 {
 }
 
 .empty-icon .ui-icon {
-  width: 30px;
-  height: 30px;
-  stroke-width: 1.8;
+  font-size: var(--icon-xl);
 }
 
 .empty-state h2 {
@@ -1392,8 +1421,7 @@ h4 {
 }
 
 .search-icon .ui-icon {
-  width: 19px;
-  height: 19px;
+  font-size: var(--icon-sm);
 }
 
 .search-bar input {
@@ -1458,8 +1486,7 @@ h4 {
 }
 
 .plugin-icon .ui-icon {
-  width: 22px;
-  height: 22px;
+  font-size: var(--icon-lg);
 }
 
 .plugin-title {
@@ -1828,14 +1855,12 @@ h4 {
 }
 
 .qr-stage .qr-error .ui-icon {
-  width: 42px;
-  height: 42px;
+  font-size: var(--icon-2xl);
   color: var(--m3-error);
 }
 
 .qr-stage .qr-fail .ui-icon {
-  width: 42px;
-  height: 42px;
+  font-size: var(--icon-2xl);
   color: var(--m3-error);
 }
 
@@ -2072,9 +2097,7 @@ h4 {
 }
 
 .player-control .ui-icon {
-  width: 20px;
-  height: 20px;
-  stroke-width: 1.9;
+  font-size: var(--icon-md);
 }
 
 .player-control.is-active {
@@ -2107,8 +2130,7 @@ h4 {
 }
 
 .play-button .player-icon {
-  width: 20px;
-  height: 20px;
+  font-size: var(--icon-md);
 }
 
 .play-button.is-playing .player-icon {
@@ -2196,8 +2218,7 @@ h4 {
 }
 
 .np-top .icon-button .ui-icon {
-  width: 22px;
-  height: 22px;
+  font-size: var(--icon-lg);
 }
 
 .np-window-controls {
@@ -2628,8 +2649,7 @@ html[data-mode='dark'] .snackbar {
 }
 
 .onboarding-icon .ui-icon {
-  width: 34px;
-  height: 34px;
+  font-size: var(--icon-xl);
 }
 
 .onboarding-card h2 {

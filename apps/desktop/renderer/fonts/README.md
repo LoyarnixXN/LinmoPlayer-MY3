@@ -1,11 +1,11 @@
-# MiSans local fonts
+# Local fonts
 
-MiSans is **not** freely redistributable. This directory is a local-load placeholder:
+## MiSans (UI text)
 
-1. Obtain licensed MiSans files from official Xiaomi channels.
-2. Place files here as `MiSans-Regular.woff2` / `MiSans-Medium.woff2` / `MiSans-Semibold.woff2` / `MiSans-Bold.woff2` (or `.otf`).
-3. Restart Linmo Player. `styles.css` `@font-face` rules load these files when present; otherwise the app falls back to `Microsoft YaHei UI` / `PingFang SC` / system UI fonts.
+MiSans is **not** freely redistributable. Place licensed files here as `MiSans-Regular.woff2` / `MiSans-Medium.woff2` / `MiSans-Semibold.woff2` / `MiSans-Bold.woff2` (or `.otf`). Missing files are ignored; the app falls back to system Chinese UI fonts.
 
-MiSans remains first in `--app-font` / `DEFAULT_FONT_STACK` so the font is used as soon as files are available.
+## Material Symbols Rounded (icons)
 
-Alternative: import a font plugin ZIP from `examples/plugins/font-misans/` after filling in your licensed files.
+`MaterialSymbolsRounded.woff2` is the full icon set (all ligatures), instanced at **FILL=0 / wght=400** for a consistent visual weight. Source: Google `material-symbols` package (Apache-2.0). Runtime loads it locally via `styles.css` `@font-face` — no CDN.
+
+Icons are generated only through `icon()` in `apps/desktop/src/icons.js` (ligature spans). Do not mix Lucide/Tabler/custom SVG.
