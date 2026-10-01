@@ -31,8 +31,9 @@ const DARK_TOKENS = {
   scrim: '#000000',
 };
 
+/** MiSans is first; Chinese/system fallbacks only — Inter is opt-in via font plugin. */
 const DEFAULT_FONT_STACK =
-  "'MiSans', 'MiSans VF', 'Inter', 'Google Sans', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
+  "'MiSans', 'MiSans VF', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif";
 
 function tokenToCustomProperty(token) {
   return `--m3-${token.replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;

@@ -34,7 +34,7 @@
   `waiting / scanned / authorized / expired`，`authorized` 时附带 `user` 并由 provider
   持久化 Cookie。
 
-宿主 UI 通常每 2 秒轮询一次，过期后引导用户刷新二维码。网易云 provider 走
+宿主 UI 通常每 2 秒轮询一次，过期后引导用户刷新二维码。账号类 provider 走
 NeteaseCloudMusicApi 的 `/login/qr/key → /login/qr/create → /login/qr/check` 流程。
 
 ## 宿主必须保证

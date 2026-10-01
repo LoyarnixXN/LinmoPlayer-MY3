@@ -1,6 +1,6 @@
-/** Mini player bar, Now Playing overlay, lyrics and queue tabs. */
+/** Mini player bar (Apple Music-like), Now Playing overlay, lyrics and queue tabs. */
 
-import { state, publish, subscribe } from './state.js';
+import { state, subscribe } from './state.js';
 import { player } from './player.js';
 import { fetchCover } from './core-bridge.js';
 import { icon } from './icons.js';
@@ -28,28 +28,34 @@ export function renderMiniPlayer() {
   const canPrev = Boolean(song && (player.audio.currentTime > 3 || state.queueIndex > 0));
   const canNext = Boolean(song && state.queueIndex < state.queue.length - 1);
   const duration = Number.isFinite(player.audio.duration) ? player.audio.duration : 0;
-  root.innerHTML = `<input id="mini-progress" class="mini-progress-top" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度" ${song ? '' : 'disabled'} />
-    <button type="button" class="mini-info" id="mini-open" aria-label="打开播放页" ${song ? '' : 'disabled'}>
+  root.innerHTML = `<div class="mini-info" id="mini-open" role="button" tabindex="${song ? 0 : -1}" aria-label="打开播放页" ${song ? '' : 'aria-disabled="true"'}>
       ${coverMarkup(song, 'small')}
       <span class="mini-copy">
         <strong>${song ? escapeHtml(song.title) : '未选择歌曲'}</strong>
         <small>${song ? `${escapeHtml(song.artist)}${song.album ? ` · ${escapeHtml(song.album)}` : ''}` : '导入或搜索音乐后开始播放'}</small>
       </span>
-    </button>
+    </div>
     <div class="mini-transport">
-      <span class="mini-time" id="mini-current">0:00</span>
       <div class="mini-controls">
+        <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== 'sequence' ? 'is-active' : ''}" data-mini-action="mode" aria-label="播放方式：${modeLabel()}" title="播放方式：${modeLabel()}">${icon(modeIcon())}</button>
         <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="上一首" ${canPrev ? '' : 'disabled'}>${icon('previous')}</button>
         <button type="button" class="play-button ripple ${state.isPlaying ? 'is-playing' : ''}" data-mini-action="toggle" aria-label="${state.isPlaying ? '暂停' : '播放'}" ${song ? '' : 'disabled'}>${icon(state.isPlaying ? 'pause' : 'play', 'player-icon')}</button>
         <button type="button" class="player-control ripple" data-mini-action="next" aria-label="下一首" ${canNext ? '' : 'disabled'}>${icon('next')}</button>
+        <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? '取消静音' : '静音'}">${icon(muted ? 'volumeMute' : 'volume')}</button>
       </div>
-      <span class="mini-time is-right" id="mini-duration">${duration ? formatTime(duration) : '0:00'}</span>
+      <div class="mini-progress-row">
+        <span class="mini-time" id="mini-current">0:00</span>
+        <input id="mini-progress" class="m3-slider mini-progress" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度" ${song ? '' : 'disabled'} />
+        <span class="mini-time is-right" id="mini-duration">${duration ? formatTime(duration) : '0:00'}</span>
+      </div>
     </div>
     <div class="mini-extra">
-      <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== 'sequence' ? 'is-active' : ''}" data-mini-action="mode" aria-label="播放方式：${modeLabel()}" title="播放方式：${modeLabel()}">${icon(modeIcon())}</button>
-      <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? '取消静音' : '静音'}">${icon(muted ? 'volumeMute' : 'volume')}</button>
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="音量" />
-    </div>`;
+      <button type="button" class="player-control ripple" data-mini-action="lyrics" aria-label="歌词" title="歌词">${icon('lyrics')}</button>
+      <button type="button" class="player-control ripple" data-mini-action="queue" aria-label="播放队列" title="播放队列">${icon('queue')}</button>
+      <button type="button" class="player-control ripple" data-mini-action="more" aria-label="更多" title="更多">${icon('more')}</button>
+    </div>
+    <div class="mini-progress-fill" aria-hidden="true"></div>`;
   root
     .querySelector('[data-mini-action="toggle"]')
     ?.addEventListener('click', () => void player.toggle());
@@ -63,7 +69,27 @@ export function renderMiniPlayer() {
   root
     .querySelector('[data-mini-action="mute"]')
     ?.addEventListener('click', () => player.toggleMute());
-  qs('#mini-open', root)?.addEventListener('click', () => setNowPlayingOpen(true));
+  root
+    .querySelector('[data-mini-action="lyrics"]')
+    ?.addEventListener('click', () => openNowPlaying('lyrics'));
+  root
+    .querySelector('[data-mini-action="queue"]')
+    ?.addEventListener('click', () => openNowPlaying('queue'));
+  root
+    .querySelector('[data-mini-action="more"]')
+    ?.addEventListener('click', () => openNowPlaying('lyrics'));
+  const info = qs('#mini-open', root);
+  info?.addEventListener('click', () => {
+    if (!song) return;
+    setNowPlayingOpen(true);
+  });
+  info?.addEventListener('keydown', (event) => {
+    if (!song) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setNowPlayingOpen(true);
+    }
+  });
   const miniProgress = qs('#mini-progress', root);
   miniProgress?.addEventListener('pointerdown', () => (miniDragging = true));
   miniProgress?.addEventListener('pointerup', () => (miniDragging = false));
@@ -73,6 +99,11 @@ export function renderMiniPlayer() {
   const volume = qs('.volume-slider', root);
   volume?.addEventListener('input', (event) => player.setVolume(Number(event.target.value) / 100));
   updateProgressUI();
+}
+
+function openNowPlaying(tab) {
+  setNowPlayingOpen(true);
+  switchNpTab(tab);
 }
 
 export function setNowPlayingOpen(open) {
@@ -252,6 +283,13 @@ export function updateProgressUI() {
     npDuration.textContent = Number.isFinite(audio.duration) ? formatTime(audio.duration) : '0:00';
 }
 
+/** Scroll only inside the lyrics container — never jump the Now Playing page. */
+function scrollLyricsToActive(container, node) {
+  const target =
+    node.offsetTop - container.clientHeight / 2 + node.offsetHeight / 2 - container.scrollTop;
+  container.scrollBy({ top: target, behavior: 'smooth' });
+}
+
 function updateLyricsHighlight() {
   if (!state.nowPlayingOpen) return;
   const lyrics = state.lyrics;
@@ -263,8 +301,7 @@ function updateLyricsHighlight() {
   qsa('.lyrics-line', container).forEach((node) => {
     const isActive = Number(node.dataset.line) === index;
     node.classList.toggle('is-active', isActive);
-    if (isActive && Date.now() > lyricsHoldUntil)
-      node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (isActive && Date.now() > lyricsHoldUntil) scrollLyricsToActive(container, node);
   });
 }
 
@@ -299,9 +336,18 @@ export function initPlayerView() {
   qs('#np-tab-lyrics', overlay)?.addEventListener('click', () => switchNpTab('lyrics'));
   qs('#np-tab-queue', overlay)?.addEventListener('click', () => switchNpTab('queue'));
   const lyricsContainer = qs('#np-lyrics', overlay);
-  lyricsContainer?.addEventListener('wheel', () => (lyricsHoldUntil = Date.now() + 4000), {
-    passive: true,
-  });
+  lyricsContainer?.addEventListener(
+    'wheel',
+    (event) => {
+      lyricsHoldUntil = Date.now() + 4000;
+      // Contain wheel scrolling inside lyrics even at the container edges.
+      const { scrollTop, scrollHeight, clientHeight } = lyricsContainer;
+      const atTop = scrollTop <= 0 && event.deltaY < 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && event.deltaY > 0;
+      if (atTop || atBottom) event.preventDefault();
+    },
+    { passive: false },
+  );
   lyricsContainer?.addEventListener('click', (event) => {
     const line = event.target instanceof Element ? event.target.closest('[data-line]') : null;
     if (!line || !state.lyrics?.synced) return;
@@ -327,6 +373,8 @@ function switchNpTab(tab) {
   if (!overlay) return;
   qs('#np-tab-lyrics', overlay)?.classList.toggle('is-selected', tab === 'lyrics');
   qs('#np-tab-queue', overlay)?.classList.toggle('is-selected', tab === 'queue');
+  qs('#np-tab-lyrics', overlay)?.setAttribute('aria-selected', String(tab === 'lyrics'));
+  qs('#np-tab-queue', overlay)?.setAttribute('aria-selected', String(tab === 'queue'));
   qs('#np-lyrics', overlay)?.classList.toggle('is-selected', tab === 'lyrics');
   qs('#np-queue', overlay)?.classList.toggle('is-selected', tab === 'queue');
 }

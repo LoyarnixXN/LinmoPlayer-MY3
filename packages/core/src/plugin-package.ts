@@ -10,6 +10,21 @@ export const PLUGIN_PACKAGE_VERSION = 1;
 export const PLUGIN_ENTRY_LIMIT = 128;
 export const PLUGIN_FILE_SIZE_LIMIT = 64 * 1024 * 1024;
 
+/** Versions may become file names in the host — reject path-like content. */
+export const PLUGIN_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+export function isSafePluginVersion(version: unknown): version is string {
+  return (
+    typeof version === 'string' &&
+    version.length > 0 &&
+    version.length <= 64 &&
+    PLUGIN_VERSION_RE.test(version) &&
+    !version.includes('/') &&
+    !version.includes('\\') &&
+    !version.includes('..')
+  );
+}
+
 export interface PluginFontSpec {
   readonly family: string;
   readonly displayName?: string;
@@ -70,13 +85,12 @@ export function validatePluginPackageManifest(input: unknown): PluginPackageMani
     !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(manifest.id) ||
     typeof manifest.name !== 'string' ||
     !manifest.name.trim() ||
-    typeof manifest.version !== 'string' ||
-    !manifest.version.trim() ||
+    !isSafePluginVersion(manifest.version?.trim?.() ?? manifest.version) ||
     typeof manifest.hostApiVersion !== 'string' ||
     manifest.hostApiVersion.split('.')[0] !== HOST_API_VERSION.split('.')[0]
   ) {
     throw new Error(
-      '插件包清单无效：需要 packageVersion=1、合法 ID、名称、版本和兼容的宿主 API 版本。',
+      '插件包清单无效：需要 packageVersion=1、合法 ID、名称、安全版本号（x.y.z，禁止路径字符）和兼容的宿主 API 版本。',
     );
   }
   if (kind === 'music-source') {

@@ -1,13 +1,10 @@
-# 网易云本地服务插件示例
+# 在线账号音源本地服务插件示例
 
-- 声明 `service.entry=service/server.mjs`、`service.port=3000`
-- 权限：`network` + `secure-storage`
-- provider：`netease-api`（映射宿主内置网易云引擎）
+本目录提供一个可导入 Linmo 桌面端的声明式音源插件模板（provider：`netease-api`，映射宿主内置账号代理引擎）。
 
-## 两种使用方式
-
-1. **捆绑服务**：导入插件 ZIP 并启用后，宿主会启动包内 `service/server.mjs`（开发/测试用最小代理桩）。
-2. **外部 API**：本机运行官方 [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)，在插件卡片中把服务地址覆盖为 `http://127.0.0.1:3000`（或其它端口）。
+- 插件启用时随捆绑服务启动本地代理（`service.port`）。
+- 若你已自行运行兼容 API 代理，可在插件中心覆盖 `baseUrl`。
+- 完整接口能力取决于你使用的代理服务；本目录的 `server.mjs` 是可自托管的最小桩，用于验证服务生命周期与端口探测。
 
 打包：
 
@@ -15,4 +12,4 @@
 node tools/pack-plugin.mjs examples/plugins/netease-local
 ```
 
-说明：捆绑 `server.mjs` 是可自托管的最小桩，用于验证服务生命周期与端口探测；完整网易云接口请使用官方 API 服务。
+导入生成的 `dist/*.zip` 后，在插件中心启用。**应用不再自动预置账号插件**：需要账号能力时请手动导入并启用。

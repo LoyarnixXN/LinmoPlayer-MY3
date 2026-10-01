@@ -21,7 +21,7 @@ const server = createServer((request, response) => {
     return ok(response, {
       result: {
         songs: keywords
-          ? [{ id: 0, name: keywords, ar: [{ name: '网易云' }], al: { name: '本地服务' } }]
+          ? [{ id: 0, name: keywords, ar: [{ name: '在线音源' }], al: { name: '本地服务' } }]
           : [],
       },
     });

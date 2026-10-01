@@ -1,0 +1,14 @@
+{
+  "packageVersion": 1,
+  "id": "font-misans",
+  "name": "MiSans",
+  "version": "1.0.0",
+  "hostApiVersion": "1",
+  "kind": "font",
+  "description": "MiSans — 小米品牌字体。非自由分发：请自行从官方渠道获取授权文件后放入本目录并打包。",
+  "font": {
+    "family": "MiSans",
+    "displayName": "MiSans",
+    "file": "MiSans-Regular.woff2"
+  }
+}

@@ -118,7 +118,10 @@ export function openDialog({
     </div>`;
     const close = (value) => {
       layer.classList.add('is-leaving');
-      window.setTimeout(() => layer.remove(), 180);
+      window.setTimeout(() => {
+        layer.remove();
+        document.documentElement.classList.remove('dialog-open');
+      }, 180);
       document.removeEventListener('keydown', onKey, true);
       resolve(value);
     };
@@ -139,6 +142,7 @@ export function openDialog({
     qs('[data-dialog-confirm]', layer).addEventListener('click', () => close(layer));
     qs('[data-dialog-cancel]', layer)?.addEventListener('click', () => close(null));
     document.addEventListener('keydown', onKey, true);
+    document.documentElement.classList.add('dialog-open');
     document.body.appendChild(layer);
     onOpen?.(layer);
     const focusable = qs('input, textarea, select', layer) ?? qs('[data-dialog-confirm]', layer);

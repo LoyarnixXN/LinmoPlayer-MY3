@@ -266,7 +266,7 @@ export function renderHome() {
         .join('')}</div>`
     : '';
   const recommendations = state.recommendations.length
-    ? `<div class="section-heading"><h3>每日推荐</h3><span class="muted">来自网易云账号</span></div><div class="song-list" id="home-recommend-list">${state.recommendations
+    ? `<div class="section-heading"><h3>每日推荐</h3><span class="muted">来自账号音源</span></div><div class="song-list" id="home-recommend-list">${state.recommendations
         .slice(0, 10)
         .map((song, index) => songRow(song, state.recommendations, index))
         .join('')}</div>`
@@ -433,6 +433,10 @@ function bindLibraryGroups(root) {
   });
 }
 
+function localPlaylistTitle(playlist) {
+  return playlist.name ?? playlist.title ?? '';
+}
+
 function renderPlaylistsTab() {
   const localCards = state.playlists
     .map(
@@ -440,7 +444,7 @@ function renderPlaylistsTab() {
         playlist,
       ) => `<div class="playlist-card ripple" role="button" tabindex="0" data-playlist-open="local:${playlist.id}">
         <span class="playlist-cover">${icon('music')}</span>
-        <span class="playlist-copy"><strong>${escapeHtml(playlist.name)}</strong><span>${playlist.songs.length} 首 · 本地歌单</span></span>
+        <span class="playlist-copy"><strong>${escapeHtml(localPlaylistTitle(playlist))}</strong><span>${playlist.songs.length} 首 · 本地歌单</span></span>
       </div>`,
     )
     .join('');
@@ -461,7 +465,7 @@ function renderPlaylistsTab() {
   const accountHint = !enabledSourcePlugins().some((plugin) =>
     plugin.capabilities.includes('account'),
   )
-    ? `<div class="inline-note">登录网易云账号插件后，可同步远程歌单到此处。</div>`
+    ? `<div class="inline-note">启用账号类插件并登录后，可同步远程歌单到此处。</div>`
     : '';
   return `<div class="section-heading"><h4 class="subheading">本地歌单</h4><button type="button" class="text-button" id="playlist-create">${icon('add', 'button-icon')}新建歌单</button></div>
     ${
@@ -510,7 +514,7 @@ function renderPlaylistDetail(root) {
       <span class="playlist-cover large">${icon('music')}</span>
       <div class="playlist-hero-copy">
         <div class="eyebrow">${isLocal ? '本地歌单' : `远程歌单 · ${escapeHtml(sourceName(playlist.pluginId))}`}</div>
-        <h2>${escapeHtml(isLocal ? (playlist.name ?? '') : (playlist.title ?? ''))}</h2>
+        <h2>${escapeHtml(isLocal ? localPlaylistTitle(playlist) : (playlist.title ?? ''))}</h2>
         <p>${songs.length} 首</p>
         <div class="heading-actions">
           <button type="button" class="filled-button ripple" id="playlist-play" ${songs.length ? '' : 'disabled'}>${icon('play', 'button-icon')}播放全部</button>
@@ -534,7 +538,7 @@ function renderPlaylistDetail(root) {
     const { confirmDialog } = await import('./ui.js');
     const confirmed = await confirmDialog(
       '删除歌单',
-      `确定删除歌单「${escapeHtml(playlist.name)}」？歌曲本身不会受影响。`,
+      `确定删除歌单「${escapeHtml(localPlaylistTitle(playlist))}」？歌曲本身不会受影响。`,
     );
     if (!confirmed) return;
     state.playlists = state.playlists.filter((item) => String(item.id) !== String(playlist.id));
@@ -558,7 +562,7 @@ export async function addToPlaylistFlow(song) {
   const options = state.playlists
     .map(
       (playlist) =>
-        `<button type="button" class="list-option" data-pick="${playlist.id}">${icon('music', 'button-icon')}<span>${escapeHtml(playlist.name)}</span><small>${playlist.songs.length} 首</small></button>`,
+        `<button type="button" class="list-option" data-pick="${playlist.id}">${icon('music', 'button-icon')}<span>${escapeHtml(localPlaylistTitle(playlist))}</span><small>${playlist.songs.length} 首</small></button>`,
     )
     .join('');
   const picked = await openDialog({
@@ -592,7 +596,7 @@ function appendToPlaylist(playlist, song) {
   playlist.updatedAt = new Date().toISOString();
   persisters.playlists();
   publish('playlists');
-  snackbar(`已加入「${playlist.name}」`);
+  snackbar(`已加入「${localPlaylistTitle(playlist)}」`);
 }
 
 export { importAudioFiles, importAudioFolder };

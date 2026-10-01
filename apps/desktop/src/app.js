@@ -5,7 +5,14 @@ import {
   validatePluginPackageManifest,
   missingPermissions,
 } from '../../../packages/core/src/index.ts';
-import { state, subscribe, publish, persisters, installedPlugin } from './state.js';
+import {
+  state,
+  subscribe,
+  publish,
+  persisters,
+  installedPlugin,
+  enabledAccountPlugin,
+} from './state.js';
 import {
   bootPlugins,
   refreshAccount,
@@ -98,10 +105,7 @@ function fillAccountMenu() {
   const menu = qs('#account-menu');
   if (!menu) return;
   const account = state.account;
-  const hasAccountPlugin = state.plugins.some(
-    (plugin) =>
-      plugin.enabled && plugin.kind === 'music-source' && plugin.capabilities.includes('account'),
-  );
+  const hasAccountPlugin = Boolean(enabledAccountPlugin());
   // 只在已登录时展示插件提供的个人信息；未登录保持中性文案，不出现具体平台名。
   const subtitle = account
     ? `${escapeHtml(installedPlugin(state.accountPluginId)?.name ?? '插件账号')} · 已连接`
@@ -343,35 +347,6 @@ function bindShell() {
   });
 }
 
-const BUILTIN_NETEASE_ID = 'linmo.netease';
-
-/** Seed the built-in declarative NetEase plugin (still zero-code: provider + config). */
-function seedBuiltinPlugins() {
-  if (state.plugins.some((plugin) => plugin.id === BUILTIN_NETEASE_ID)) return;
-  state.plugins = [
-    ...state.plugins,
-    {
-      packageVersion: 1,
-      id: BUILTIN_NETEASE_ID,
-      name: '网易云音乐',
-      version: '1.0.0',
-      hostApiVersion: '1',
-      kind: 'music-source',
-      provider: 'netease-api',
-      config: { baseUrl: 'http://127.0.0.1:3000' },
-      capabilities: ['account', 'playlists', 'search', 'playback', 'lyrics', 'recommendations'],
-      permissions: ['network', 'secure-storage'],
-      grantedPermissions: ['network', 'secure-storage'],
-      description:
-        '内置网易云音源：扫码登录、搜索播放、歌词、账号歌单与每日推荐。需要运行 NeteaseCloudMusicApi 代理，服务地址可在下方修改。',
-      enabled: true,
-      status: '',
-      builtin: true,
-    },
-  ];
-  persisters.plugins();
-}
-
 async function boot() {
   installRipple();
   bindShell();
@@ -394,7 +369,7 @@ async function boot() {
   topics.forEach((topic) => subscribe(topic, renderActivePage));
   subscribe('account', renderAccount);
 
-  seedBuiltinPlugins();
+  // 在线音源与账号插件不再自动预置：用户在插件中心自行导入并启用。
   await applyAppearance();
   await bootPlugins();
   await refreshAccount();

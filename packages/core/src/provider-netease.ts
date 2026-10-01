@@ -106,7 +106,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
           payload.code !== 0)
       ) {
         throw new NeteaseApiError(
-          payload.msg ?? payload.message ?? `网易云代理请求失败（HTTP ${response.status}）。`,
+          payload.msg ?? payload.message ?? `音源代理请求失败（HTTP ${response.status}）。`,
           payload.code,
         );
       }
@@ -114,8 +114,8 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
     } catch (error) {
       if (error instanceof NeteaseApiError) throw error;
       if (error instanceof Error && error.name === 'AbortError')
-        throw new NeteaseApiError('网易云代理请求超时。');
-      throw new NeteaseApiError(error instanceof Error ? error.message : '无法连接网易云代理。');
+        throw new NeteaseApiError('音源代理请求超时。');
+      throw new NeteaseApiError(error instanceof Error ? error.message : '无法连接音源代理。');
     } finally {
       clearTimeout(timer);
     }
@@ -142,7 +142,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
 
   function toPluginSong(song: NeteaseSong): PluginSong {
     if (song.id === undefined || song.name === undefined)
-      throw new NeteaseApiError('网易云返回了缺少 ID 或标题的歌曲。');
+      throw new NeteaseApiError('音源返回了缺少 ID 或标题的歌曲。');
     return {
       remoteId: String(song.id),
       title: song.name,
@@ -161,7 +161,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
   return {
     manifest: {
       id: pluginId,
-      name: '网易云音乐账号',
+      name: '在线账号音源',
       version: '1.0.0',
       hostApiVersion: '1',
       capabilities: ['account', 'playlists', 'search', 'playback', 'lyrics', 'recommendations'],
@@ -196,10 +196,10 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
             })
           : await post('/login', { email: request_.identifier, password: request_.password });
       if (!response.profile && !response.account)
-        throw new NeteaseApiError('网易云登录失败：代理没有返回账户信息。');
+        throw new NeteaseApiError('账号登录失败：代理没有返回账户信息。');
       user = {
         remoteId: String(response.profile?.userId ?? response.account?.id ?? ''),
-        name: response.profile?.nickname ?? '网易云用户',
+        name: response.profile?.nickname ?? '账号用户',
         ...(response.profile?.avatarUrl ? { avatarUrl: response.profile.avatarUrl } : {}),
       };
       cookie = response.cookie ?? '';
@@ -275,7 +275,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
         }>('/user/account');
         user = {
           remoteId: String(account.profile?.userId ?? ''),
-          name: account.profile?.nickname ?? '网易云用户',
+          name: account.profile?.nickname ?? '账号用户',
           ...(account.profile?.avatarUrl ? { avatarUrl: account.profile.avatarUrl } : {}),
         };
         return user;
@@ -324,7 +324,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
         { id: song.remoteId, level },
       );
       const resource = (response.data ?? []).find((item) => Boolean(item.url));
-      if (!resource?.url) throw new Error('网易云代理无法提供此歌曲的播放地址。');
+      if (!resource?.url) throw new Error('音源代理无法提供此歌曲的播放地址。');
       return {
         url: resource.url,
         quality,
@@ -349,7 +349,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
 
     async getRecommendations(): Promise<readonly PluginSong[]> {
       const currentUser = user ?? (await this.getUser?.());
-      if (!currentUser) throw new NeteaseApiError('尚未登录网易云账号。');
+      if (!currentUser) throw new NeteaseApiError('尚未登录账号插件。');
       const response = await get<{ data?: { dailySongs?: readonly NeteaseSong[] } }>(
         '/recommend/songs',
       );
@@ -360,7 +360,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
 
     async listUserPlaylists(): Promise<readonly PluginPlaylist[]> {
       const currentUser = user ?? (await this.getUser?.());
-      if (!currentUser) throw new NeteaseApiError('尚未登录网易云账号。');
+      if (!currentUser) throw new NeteaseApiError('尚未登录账号插件。');
       const response = await get<{ playlist?: readonly NeteasePlaylist[] }>('/user/playlist', {
         uid: currentUser.remoteId,
       });

@@ -271,6 +271,9 @@
   });
 
   // ../../packages/core/src/plugin-package.ts
+  function isSafePluginVersion(version) {
+    return typeof version === "string" && version.length > 0 && version.length <= 64 && PLUGIN_VERSION_RE.test(version) && !version.includes("/") && !version.includes("\\") && !version.includes("..");
+  }
   function validatePluginPackageManifest(input) {
     if (!isRecord(input)) throw new Error("\u63D2\u4EF6\u5305\u7F3A\u5C11 plugin.json\u3002");
     const manifest = isRecord(input.manifest) ? input.manifest : input;
@@ -279,9 +282,9 @@
       throw new Error(`\u63D2\u4EF6\u7C7B\u578B\u65E0\u6548\uFF1A${String(kind)}\uFF08\u652F\u6301 ${PLUGIN_KINDS.join(" / ")}\uFF09\u3002`);
     }
     const capabilities = manifest.capabilities;
-    if (manifest.packageVersion !== PLUGIN_PACKAGE_VERSION || typeof manifest.id !== "string" || !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(manifest.id) || typeof manifest.name !== "string" || !manifest.name.trim() || typeof manifest.version !== "string" || !manifest.version.trim() || typeof manifest.hostApiVersion !== "string" || manifest.hostApiVersion.split(".")[0] !== HOST_API_VERSION.split(".")[0]) {
+    if (manifest.packageVersion !== PLUGIN_PACKAGE_VERSION || typeof manifest.id !== "string" || !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(manifest.id) || typeof manifest.name !== "string" || !manifest.name.trim() || !isSafePluginVersion(manifest.version?.trim?.() ?? manifest.version) || typeof manifest.hostApiVersion !== "string" || manifest.hostApiVersion.split(".")[0] !== HOST_API_VERSION.split(".")[0]) {
       throw new Error(
-        "\u63D2\u4EF6\u5305\u6E05\u5355\u65E0\u6548\uFF1A\u9700\u8981 packageVersion=1\u3001\u5408\u6CD5 ID\u3001\u540D\u79F0\u3001\u7248\u672C\u548C\u517C\u5BB9\u7684\u5BBF\u4E3B API \u7248\u672C\u3002"
+        "\u63D2\u4EF6\u5305\u6E05\u5355\u65E0\u6548\uFF1A\u9700\u8981 packageVersion=1\u3001\u5408\u6CD5 ID\u3001\u540D\u79F0\u3001\u5B89\u5168\u7248\u672C\u53F7\uFF08x.y.z\uFF0C\u7981\u6B62\u8DEF\u5F84\u5B57\u7B26\uFF09\u548C\u517C\u5BB9\u7684\u5BBF\u4E3B API \u7248\u672C\u3002"
       );
     }
     if (kind === "music-source") {
@@ -370,13 +373,14 @@
   function isCapability(value) {
     return typeof value === "string" && PLUGIN_CAPABILITIES.includes(value);
   }
-  var PLUGIN_PACKAGE_VERSION, PLUGIN_FILE_SIZE_LIMIT, PLUGIN_KINDS, KNOWN_PROVIDERS;
+  var PLUGIN_PACKAGE_VERSION, PLUGIN_FILE_SIZE_LIMIT, PLUGIN_VERSION_RE, PLUGIN_KINDS, KNOWN_PROVIDERS;
   var init_plugin_package = __esm({
     "../../packages/core/src/plugin-package.ts"() {
       "use strict";
       init_plugin_contract();
       PLUGIN_PACKAGE_VERSION = 1;
       PLUGIN_FILE_SIZE_LIMIT = 64 * 1024 * 1024;
+      PLUGIN_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
       PLUGIN_KINDS = ["music-source", "theme", "font"];
       KNOWN_PROVIDERS = ["gdstudio", "netease-api"];
     }
@@ -600,7 +604,7 @@
         const payload = await response.json();
         if (!response.ok || !skipCodeCheck && typeof payload.code === "number" && payload.code !== 200 && payload.code !== 0) {
           throw new NeteaseApiError(
-            payload.msg ?? payload.message ?? `\u7F51\u6613\u4E91\u4EE3\u7406\u8BF7\u6C42\u5931\u8D25\uFF08HTTP ${response.status}\uFF09\u3002`,
+            payload.msg ?? payload.message ?? `\u97F3\u6E90\u4EE3\u7406\u8BF7\u6C42\u5931\u8D25\uFF08HTTP ${response.status}\uFF09\u3002`,
             payload.code
           );
         }
@@ -608,8 +612,8 @@
       } catch (error) {
         if (error instanceof NeteaseApiError) throw error;
         if (error instanceof Error && error.name === "AbortError")
-          throw new NeteaseApiError("\u7F51\u6613\u4E91\u4EE3\u7406\u8BF7\u6C42\u8D85\u65F6\u3002");
-        throw new NeteaseApiError(error instanceof Error ? error.message : "\u65E0\u6CD5\u8FDE\u63A5\u7F51\u6613\u4E91\u4EE3\u7406\u3002");
+          throw new NeteaseApiError("\u97F3\u6E90\u4EE3\u7406\u8BF7\u6C42\u8D85\u65F6\u3002");
+        throw new NeteaseApiError(error instanceof Error ? error.message : "\u65E0\u6CD5\u8FDE\u63A5\u97F3\u6E90\u4EE3\u7406\u3002");
       } finally {
         clearTimeout(timer);
       }
@@ -629,7 +633,7 @@
     }
     function toPluginSong(song) {
       if (song.id === void 0 || song.name === void 0)
-        throw new NeteaseApiError("\u7F51\u6613\u4E91\u8FD4\u56DE\u4E86\u7F3A\u5C11 ID \u6216\u6807\u9898\u7684\u6B4C\u66F2\u3002");
+        throw new NeteaseApiError("\u97F3\u6E90\u8FD4\u56DE\u4E86\u7F3A\u5C11 ID \u6216\u6807\u9898\u7684\u6B4C\u66F2\u3002");
       return {
         remoteId: String(song.id),
         title: song.name,
@@ -643,7 +647,7 @@
     return {
       manifest: {
         id: pluginId,
-        name: "\u7F51\u6613\u4E91\u97F3\u4E50\u8D26\u53F7",
+        name: "\u5728\u7EBF\u8D26\u53F7\u97F3\u6E90",
         version: "1.0.0",
         hostApiVersion: "1",
         capabilities: ["account", "playlists", "search", "playback", "lyrics", "recommendations"]
@@ -672,10 +676,10 @@
           countrycode: request_.countryCode ?? "86"
         }) : await post("/login", { email: request_.identifier, password: request_.password });
         if (!response.profile && !response.account)
-          throw new NeteaseApiError("\u7F51\u6613\u4E91\u767B\u5F55\u5931\u8D25\uFF1A\u4EE3\u7406\u6CA1\u6709\u8FD4\u56DE\u8D26\u6237\u4FE1\u606F\u3002");
+          throw new NeteaseApiError("\u8D26\u53F7\u767B\u5F55\u5931\u8D25\uFF1A\u4EE3\u7406\u6CA1\u6709\u8FD4\u56DE\u8D26\u6237\u4FE1\u606F\u3002");
         user = {
           remoteId: String(response.profile?.userId ?? response.account?.id ?? ""),
-          name: response.profile?.nickname ?? "\u7F51\u6613\u4E91\u7528\u6237",
+          name: response.profile?.nickname ?? "\u8D26\u53F7\u7528\u6237",
           ...response.profile?.avatarUrl ? { avatarUrl: response.profile.avatarUrl } : {}
         };
         cookie = response.cookie ?? "";
@@ -740,7 +744,7 @@
           const account = await get("/user/account");
           user = {
             remoteId: String(account.profile?.userId ?? ""),
-            name: account.profile?.nickname ?? "\u7F51\u6613\u4E91\u7528\u6237",
+            name: account.profile?.nickname ?? "\u8D26\u53F7\u7528\u6237",
             ...account.profile?.avatarUrl ? { avatarUrl: account.profile.avatarUrl } : {}
           };
           return user;
@@ -771,7 +775,7 @@
           { id: song.remoteId, level }
         );
         const resource = (response.data ?? []).find((item) => Boolean(item.url));
-        if (!resource?.url) throw new Error("\u7F51\u6613\u4E91\u4EE3\u7406\u65E0\u6CD5\u63D0\u4F9B\u6B64\u6B4C\u66F2\u7684\u64AD\u653E\u5730\u5740\u3002");
+        if (!resource?.url) throw new Error("\u97F3\u6E90\u4EE3\u7406\u65E0\u6CD5\u63D0\u4F9B\u6B64\u6B4C\u66F2\u7684\u64AD\u653E\u5730\u5740\u3002");
         return {
           url: resource.url,
           quality,
@@ -793,7 +797,7 @@
       },
       async getRecommendations() {
         const currentUser = user ?? await this.getUser?.();
-        if (!currentUser) throw new NeteaseApiError("\u5C1A\u672A\u767B\u5F55\u7F51\u6613\u4E91\u8D26\u53F7\u3002");
+        if (!currentUser) throw new NeteaseApiError("\u5C1A\u672A\u767B\u5F55\u8D26\u53F7\u63D2\u4EF6\u3002");
         const response = await get(
           "/recommend/songs"
         );
@@ -801,7 +805,7 @@
       },
       async listUserPlaylists() {
         const currentUser = user ?? await this.getUser?.();
-        if (!currentUser) throw new NeteaseApiError("\u5C1A\u672A\u767B\u5F55\u7F51\u6613\u4E91\u8D26\u53F7\u3002");
+        if (!currentUser) throw new NeteaseApiError("\u5C1A\u672A\u767B\u5F55\u8D26\u53F7\u63D2\u4EF6\u3002");
         const response = await get("/user/playlist", {
           uid: currentUser.remoteId
         });
@@ -1410,7 +1414,7 @@
   function friendlyNetError(message) {
     const text = String(message);
     if (/ERR_CONNECTION_REFUSED/i.test(text))
-      return "\u65E0\u6CD5\u8FDE\u63A5\u5230\u97F3\u6E90\u4EE3\u7406\u670D\u52A1\uFF1A\u8BF7\u786E\u8BA4\u4EE3\u7406\u5DF2\u542F\u52A8\uFF08\u7F51\u6613\u4E91\u9ED8\u8BA4\u7AEF\u53E3 3000\uFF09\uFF0C\u670D\u52A1\u5730\u5740\u53EF\u5728\u63D2\u4EF6\u4E2D\u5FC3\u4FEE\u6539\u3002";
+      return "\u65E0\u6CD5\u8FDE\u63A5\u5230\u97F3\u6E90\u4EE3\u7406\u670D\u52A1\uFF1A\u8BF7\u786E\u8BA4\u4EE3\u7406\u5DF2\u542F\u52A8\uFF0C\u670D\u52A1\u5730\u5740\u53EF\u5728\u63D2\u4EF6\u4E2D\u5FC3\u4FEE\u6539\u3002";
     if (/ERR_CONNECTION_RESET|ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED/i.test(text))
       return "\u7F51\u7EDC\u8FDE\u63A5\u4E0D\u53EF\u7528\u6216\u88AB\u91CD\u7F6E\uFF1A\u8BF7\u68C0\u67E5\u7F51\u7EDC\u4E0E\u4EE3\u7406\u8BBE\u7F6E\u540E\u91CD\u8BD5\u3002";
     if (/ERR_TIMED_OUT|AbortError|超时/i.test(text)) return "\u8FDE\u63A5\u8D85\u65F6\uFF1A\u4EE3\u7406\u670D\u52A1\u54CD\u5E94\u8FC7\u6162\u6216\u4E0D\u53EF\u8FBE\u3002";
@@ -1600,7 +1604,7 @@
         search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
         library: '<path d="M5 4.5v15"/><path d="M9 5.5a2 2 0 0 1 2-2h7.5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H11a2 2 0 0 0-2 2"/><path d="M9.5 18.5h10"/>',
         plugins: '<path d="m12 2.8 2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5Z"/>',
-        settings: '<path fill="currentColor" stroke="none" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58ZM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6Z"/>',
+        settings: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3.2v2.2M12 18.6v2.2M20.8 12h-2.2M5.4 12H3.2M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6M18.2 18.2l-1.6-1.6M7.4 7.4 5.8 5.8"/>',
         music: '<path d="M9 18.5V5.5l10-2.2v13"/><circle cx="6.5" cy="18.5" r="2.8"/><circle cx="16.5" cy="16.3" r="2.8"/>',
         play: '<path d="M8.2 5.2a.8.8 0 0 1 1.22-.68l10.4 6.8a.8.8 0 0 1 0 1.34l-10.4 6.8a.8.8 0 0 1-1.22-.68Z" fill="currentColor" stroke="none"/>',
         pause: '<path d="M7.5 5.5v13M16.5 5.5v13"/>',
@@ -1763,7 +1767,10 @@
     </div>`;
       const close = (value) => {
         layer.classList.add("is-leaving");
-        window.setTimeout(() => layer.remove(), 180);
+        window.setTimeout(() => {
+          layer.remove();
+          document.documentElement.classList.remove("dialog-open");
+        }, 180);
         document.removeEventListener("keydown", onKey, true);
         resolve(value);
       };
@@ -1784,6 +1791,7 @@
       qs("[data-dialog-confirm]", layer).addEventListener("click", () => close(layer));
       qs("[data-dialog-cancel]", layer)?.addEventListener("click", () => close(null));
       document.addEventListener("keydown", onKey, true);
+      document.documentElement.classList.add("dialog-open");
       document.body.appendChild(layer);
       onOpen?.(layer);
       const focusable = qs("input, textarea, select", layer) ?? qs("[data-dialog-confirm]", layer);
@@ -1930,7 +1938,7 @@
         error: "#F2B8B5",
         scrim: "#000000"
       };
-      DEFAULT_FONT_STACK = "'MiSans', 'MiSans VF', 'Inter', 'Google Sans', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
+      DEFAULT_FONT_STACK = "'MiSans', 'MiSans VF', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif";
       installedThemePlugins = () => state.plugins.filter((plugin) => plugin.kind === "theme");
       installedFontPlugins = () => state.plugins.filter((plugin) => plugin.kind === "font");
     }
@@ -2449,17 +2457,18 @@
   async function renamePlaylistDialog(playlistId) {
     const playlist = state.playlists.find((item) => String(item.id) === String(playlistId));
     if (!playlist) return;
+    const currentName = playlist.name ?? playlist.title ?? "";
     const layer = await openDialog({
       eyebrow: "LOCAL PLAYLIST",
       title: "\u91CD\u547D\u540D\u6B4C\u5355",
       body: `<label class="field"><span>\u6B4C\u5355\u540D\u79F0</span>
-      <input type="text" id="playlist-name" maxlength="60" value="${playlist.name.replace(/"/g, "&quot;")}" /></label>`,
+      <input type="text" id="playlist-name" maxlength="60" value="${escapeHtml(currentName).replace(/"/g, "&quot;")}" /></label>`,
       confirmLabel: "\u4FDD\u5B58",
       cancelLabel: "\u53D6\u6D88"
     });
     if (!layer) return;
     const name = String(qs("#playlist-name", layer)?.value ?? "").trim();
-    if (!name || name === playlist.name) return;
+    if (!name || name === currentName) return;
     playlist.name = name;
     playlist.title = name;
     playlist.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -2473,8 +2482,10 @@
     </div>
     <div class="login-panel is-selected" data-login-panel="qr">
       <div class="qr-stage" id="qr-stage"><span class="spinner"></span></div>
-      <p class="qr-status" id="qr-status">\u6B63\u5728\u83B7\u53D6\u4E8C\u7EF4\u7801\u2026</p>
-      <button type="button" class="text-button" id="qr-refresh" hidden>${icon("refresh", "button-icon")}\u5237\u65B0\u4E8C\u7EF4\u7801</button>
+      <div class="qr-status-row" id="qr-status-row">
+        <p class="qr-status" id="qr-status">\u6B63\u5728\u83B7\u53D6\u4E8C\u7EF4\u7801\u2026</p>
+        <button type="button" class="text-button" id="qr-refresh" hidden>${icon("refresh", "button-icon")}\u5237\u65B0\u4E8C\u7EF4\u7801</button>
+      </div>
       <p class="field-hint">${QR_HINT}</p>
     </div>
     <div class="login-panel" data-login-panel="password">
@@ -2511,15 +2522,18 @@
     const refresh = qs("#qr-refresh", layer);
     if (!stage || !status) return;
     const setStatus2 = (text) => status.textContent = text;
+    const showFail = (error) => {
+      stage.innerHTML = `<div class="qr-error">${icon("error")}<span>\u4E8C\u7EF4\u7801\u83B7\u53D6\u5931\u8D25</span></div>`;
+      setStatus2(error);
+      refresh.hidden = false;
+    };
     refresh.hidden = true;
     stage.innerHTML = '<span class="spinner"></span>';
     setStatus2("\u6B63\u5728\u83B7\u53D6\u4E8C\u7EF4\u7801\u2026");
     const start = await qrLoginStart();
     if (!alive()) return;
     if (!start.ok) {
-      stage.innerHTML = `<span class="qr-fail">${icon("error")}</span>`;
-      setStatus2(start.error);
-      refresh.hidden = false;
+      showFail(start.error);
       return;
     }
     stage.innerHTML = start.value.qrDataUri ? `<img src="${escapeHtml(start.value.qrDataUri)}" alt="\u767B\u5F55\u4E8C\u7EF4\u7801"/>` : `<a class="qr-link" href="${escapeHtml(start.value.qrUrl ?? "")}" target="_blank">${escapeHtml(start.value.qrUrl ?? "")}</a>`;
@@ -2535,8 +2549,7 @@
       }
       if (!alive()) return;
       if (!poll.ok) {
-        setStatus2(poll.error);
-        refresh.hidden = false;
+        showFail(poll.error);
         return;
       }
       if (poll.value.state === "scanned") setStatus2("\u5DF2\u626B\u7801\uFF0C\u8BF7\u5728\u624B\u673A\u4E0A\u786E\u8BA4");
@@ -2555,6 +2568,11 @@
     }
   }
   async function loginDialog() {
+    const accountPlugin = enabledAccountPlugin();
+    if (!accountPlugin) {
+      snackbar("\u8BF7\u5148\u5728\u63D2\u4EF6\u4E2D\u5FC3\u542F\u7528\u8D26\u53F7\u7C7B\u63D2\u4EF6\uFF0C\u518D\u767B\u5F55\u8D26\u53F7\u3002");
+      return null;
+    }
     const wire = (layer) => {
       if (!layer) {
         qrFlowToken += 1;
@@ -2850,7 +2868,7 @@
         song.artist
       )}</span></div>`
     ).join("")}</div>` : "";
-    const recommendations = state.recommendations.length ? `<div class="section-heading"><h3>\u6BCF\u65E5\u63A8\u8350</h3><span class="muted">\u6765\u81EA\u7F51\u6613\u4E91\u8D26\u53F7</span></div><div class="song-list" id="home-recommend-list">${state.recommendations.slice(0, 10).map((song, index) => songRow(song, state.recommendations, index)).join("")}</div>` : "";
+    const recommendations = state.recommendations.length ? `<div class="section-heading"><h3>\u6BCF\u65E5\u63A8\u8350</h3><span class="muted">\u6765\u81EA\u8D26\u53F7\u97F3\u6E90</span></div><div class="song-list" id="home-recommend-list">${state.recommendations.slice(0, 10).map((song, index) => songRow(song, state.recommendations, index)).join("")}</div>` : "";
     const library = state.songs.length ? `<div class="section-heading"><h3>\u672C\u5730\u97F3\u4E50</h3><button type="button" class="text-button" data-nav-library>\u67E5\u770B\u5168\u90E8</button></div><div class="song-list" id="home-local-list">${state.songs.slice(0, 6).map((song, index) => songRow(song, state.songs, index)).join("")}</div>` : `<div class="empty-state">${icon("music", "empty-icon")}<h2>\u5F00\u59CB\u4F7F\u7528 Linmo Player</h2><p>\u5BFC\u5165\u672C\u5730\u97F3\u9891\u6587\u4EF6\uFF0C\u6216\u542F\u7528\u97F3\u6E90\u63D2\u4EF6\u540E\u5728\u7EBF\u641C\u7D22\u64AD\u653E\u3002</p></div>`;
     root.innerHTML = `<div class="hero">
       <div class="hero-copy">
@@ -2976,11 +2994,14 @@
       });
     });
   }
+  function localPlaylistTitle(playlist) {
+    return playlist.name ?? playlist.title ?? "";
+  }
   function renderPlaylistsTab() {
     const localCards = state.playlists.map(
       (playlist) => `<div class="playlist-card ripple" role="button" tabindex="0" data-playlist-open="local:${playlist.id}">
         <span class="playlist-cover">${icon("music")}</span>
-        <span class="playlist-copy"><strong>${escapeHtml(playlist.name)}</strong><span>${playlist.songs.length} \u9996 \xB7 \u672C\u5730\u6B4C\u5355</span></span>
+        <span class="playlist-copy"><strong>${escapeHtml(localPlaylistTitle(playlist))}</strong><span>${playlist.songs.length} \u9996 \xB7 \u672C\u5730\u6B4C\u5355</span></span>
       </div>`
     ).join("");
     const remoteCards = state.remotePlaylists.map(
@@ -2991,7 +3012,7 @@
     ).join("");
     const accountHint = !enabledSourcePlugins().some(
       (plugin) => plugin.capabilities.includes("account")
-    ) ? `<div class="inline-note">\u767B\u5F55\u7F51\u6613\u4E91\u8D26\u53F7\u63D2\u4EF6\u540E\uFF0C\u53EF\u540C\u6B65\u8FDC\u7A0B\u6B4C\u5355\u5230\u6B64\u5904\u3002</div>` : "";
+    ) ? `<div class="inline-note">\u542F\u7528\u8D26\u53F7\u7C7B\u63D2\u4EF6\u5E76\u767B\u5F55\u540E\uFF0C\u53EF\u540C\u6B65\u8FDC\u7A0B\u6B4C\u5355\u5230\u6B64\u5904\u3002</div>` : "";
     return `<div class="section-heading"><h4 class="subheading">\u672C\u5730\u6B4C\u5355</h4><button type="button" class="text-button" id="playlist-create">${icon("add", "button-icon")}\u65B0\u5EFA\u6B4C\u5355</button></div>
     ${localCards ? `<div class="playlist-grid">${localCards}</div>` : `<div class="inline-note">\u8FD8\u6CA1\u6709\u672C\u5730\u6B4C\u5355\uFF0C\u70B9\u51FB\u300C\u65B0\u5EFA\u6B4C\u5355\u300D\u521B\u5EFA\u4E00\u4E2A\u3002</div>`}
     <div class="section-heading"><h4 class="subheading">\u8FDC\u7A0B\u6B4C\u5355</h4><button type="button" class="text-button" id="playlist-sync">${icon("sync", "button-icon")}\u540C\u6B65\u6B4C\u5355</button></div>
@@ -3031,7 +3052,7 @@
       <span class="playlist-cover large">${icon("music")}</span>
       <div class="playlist-hero-copy">
         <div class="eyebrow">${isLocal ? "\u672C\u5730\u6B4C\u5355" : `\u8FDC\u7A0B\u6B4C\u5355 \xB7 ${escapeHtml(sourceName(playlist.pluginId))}`}</div>
-        <h2>${escapeHtml(isLocal ? playlist.name ?? "" : playlist.title ?? "")}</h2>
+        <h2>${escapeHtml(isLocal ? localPlaylistTitle(playlist) : playlist.title ?? "")}</h2>
         <p>${songs.length} \u9996</p>
         <div class="heading-actions">
           <button type="button" class="filled-button ripple" id="playlist-play" ${songs.length ? "" : "disabled"}>${icon("play", "button-icon")}\u64AD\u653E\u5168\u90E8</button>
@@ -3050,7 +3071,7 @@
       const { confirmDialog: confirmDialog2 } = await Promise.resolve().then(() => (init_ui(), ui_exports));
       const confirmed = await confirmDialog2(
         "\u5220\u9664\u6B4C\u5355",
-        `\u786E\u5B9A\u5220\u9664\u6B4C\u5355\u300C${escapeHtml(playlist.name)}\u300D\uFF1F\u6B4C\u66F2\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002`
+        `\u786E\u5B9A\u5220\u9664\u6B4C\u5355\u300C${escapeHtml(localPlaylistTitle(playlist))}\u300D\uFF1F\u6B4C\u66F2\u672C\u8EAB\u4E0D\u4F1A\u53D7\u5F71\u54CD\u3002`
       );
       if (!confirmed) return;
       state.playlists = state.playlists.filter((item) => String(item.id) !== String(playlist.id));
@@ -3070,7 +3091,7 @@
   async function addToPlaylistFlow(song) {
     if (!song) return;
     const options = state.playlists.map(
-      (playlist) => `<button type="button" class="list-option" data-pick="${playlist.id}">${icon("music", "button-icon")}<span>${escapeHtml(playlist.name)}</span><small>${playlist.songs.length} \u9996</small></button>`
+      (playlist) => `<button type="button" class="list-option" data-pick="${playlist.id}">${icon("music", "button-icon")}<span>${escapeHtml(localPlaylistTitle(playlist))}</span><small>${playlist.songs.length} \u9996</small></button>`
     ).join("");
     const picked = await openDialog({
       title: "\u52A0\u5165\u6B4C\u5355",
@@ -3102,7 +3123,7 @@
     playlist.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     persisters.playlists();
     publish("playlists");
-    snackbar(`\u5DF2\u52A0\u5165\u300C${playlist.name}\u300D`);
+    snackbar(`\u5DF2\u52A0\u5165\u300C${localPlaylistTitle(playlist)}\u300D`);
   }
   var coverHydrationChain, LIBRARY_TABS;
   var init_views_main = __esm({
@@ -3209,7 +3230,7 @@
         {
           icon: "plugins",
           title: "\u7528\u63D2\u4EF6\u6269\u5C55\u64AD\u653E\u5668",
-          body: "\u5728\u63D2\u4EF6\u4E2D\u5FC3\u5BFC\u5165\u58F0\u660E\u5F0F\u63D2\u4EF6 ZIP\uFF1A\u63A5\u5165\u5728\u7EBF\u97F3\u6E90\u3001\u767B\u5F55\u7F51\u6613\u4E91\u3001\u66F4\u6362\u4E3B\u9898\u4E0E\u5B57\u4F53\u3002",
+          body: "\u5728\u63D2\u4EF6\u4E2D\u5FC3\u5BFC\u5165\u58F0\u660E\u5F0F\u63D2\u4EF6 ZIP\uFF1A\u63A5\u5165\u5728\u7EBF\u97F3\u6E90\u3001\u767B\u5F55\u8D26\u53F7\u3001\u66F4\u6362\u4E3B\u9898\u4E0E\u5B57\u4F53\u3002",
           action: "\u5F00\u59CB\u4F7F\u7528"
         }
       ];
@@ -3645,34 +3666,54 @@
     const canPrev = Boolean(song && (player.audio.currentTime > 3 || state.queueIndex > 0));
     const canNext = Boolean(song && state.queueIndex < state.queue.length - 1);
     const duration = Number.isFinite(player.audio.duration) ? player.audio.duration : 0;
-    root.innerHTML = `<input id="mini-progress" class="mini-progress-top" type="range" min="0" max="1000" step="1" value="0" aria-label="\u64AD\u653E\u8FDB\u5EA6" ${song ? "" : "disabled"} />
-    <button type="button" class="mini-info" id="mini-open" aria-label="\u6253\u5F00\u64AD\u653E\u9875" ${song ? "" : "disabled"}>
+    root.innerHTML = `<div class="mini-info" id="mini-open" role="button" tabindex="${song ? 0 : -1}" aria-label="\u6253\u5F00\u64AD\u653E\u9875" ${song ? "" : 'aria-disabled="true"'}>
       ${coverMarkup(song, "small")}
       <span class="mini-copy">
         <strong>${song ? escapeHtml(song.title) : "\u672A\u9009\u62E9\u6B4C\u66F2"}</strong>
         <small>${song ? `${escapeHtml(song.artist)}${song.album ? ` \xB7 ${escapeHtml(song.album)}` : ""}` : "\u5BFC\u5165\u6216\u641C\u7D22\u97F3\u4E50\u540E\u5F00\u59CB\u64AD\u653E"}</small>
       </span>
-    </button>
+    </div>
     <div class="mini-transport">
-      <span class="mini-time" id="mini-current">0:00</span>
       <div class="mini-controls">
+        <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== "sequence" ? "is-active" : ""}" data-mini-action="mode" aria-label="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}" title="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}">${icon(modeIcon())}</button>
         <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="\u4E0A\u4E00\u9996" ${canPrev ? "" : "disabled"}>${icon("previous")}</button>
         <button type="button" class="play-button ripple ${state.isPlaying ? "is-playing" : ""}" data-mini-action="toggle" aria-label="${state.isPlaying ? "\u6682\u505C" : "\u64AD\u653E"}" ${song ? "" : "disabled"}>${icon(state.isPlaying ? "pause" : "play", "player-icon")}</button>
         <button type="button" class="player-control ripple" data-mini-action="next" aria-label="\u4E0B\u4E00\u9996" ${canNext ? "" : "disabled"}>${icon("next")}</button>
+        <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? "\u53D6\u6D88\u9759\u97F3" : "\u9759\u97F3"}">${icon(muted ? "volumeMute" : "volume")}</button>
       </div>
-      <span class="mini-time is-right" id="mini-duration">${duration ? formatTime(duration) : "0:00"}</span>
+      <div class="mini-progress-row">
+        <span class="mini-time" id="mini-current">0:00</span>
+        <input id="mini-progress" class="m3-slider mini-progress" type="range" min="0" max="1000" step="1" value="0" aria-label="\u64AD\u653E\u8FDB\u5EA6" ${song ? "" : "disabled"} />
+        <span class="mini-time is-right" id="mini-duration">${duration ? formatTime(duration) : "0:00"}</span>
+      </div>
     </div>
     <div class="mini-extra">
-      <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== "sequence" ? "is-active" : ""}" data-mini-action="mode" aria-label="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}" title="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}">${icon(modeIcon())}</button>
-      <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? "\u53D6\u6D88\u9759\u97F3" : "\u9759\u97F3"}">${icon(muted ? "volumeMute" : "volume")}</button>
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="\u97F3\u91CF" />
-    </div>`;
+      <button type="button" class="player-control ripple" data-mini-action="lyrics" aria-label="\u6B4C\u8BCD" title="\u6B4C\u8BCD">${icon("lyrics")}</button>
+      <button type="button" class="player-control ripple" data-mini-action="queue" aria-label="\u64AD\u653E\u961F\u5217" title="\u64AD\u653E\u961F\u5217">${icon("queue")}</button>
+      <button type="button" class="player-control ripple" data-mini-action="more" aria-label="\u66F4\u591A" title="\u66F4\u591A">${icon("more")}</button>
+    </div>
+    <div class="mini-progress-fill" aria-hidden="true"></div>`;
     root.querySelector('[data-mini-action="toggle"]')?.addEventListener("click", () => void player.toggle());
     root.querySelector('[data-mini-action="mode"]')?.addEventListener("click", () => player.cycleMode());
     root.querySelector('[data-mini-action="previous"]')?.addEventListener("click", () => player.previous());
     root.querySelector('[data-mini-action="next"]')?.addEventListener("click", () => player.next());
     root.querySelector('[data-mini-action="mute"]')?.addEventListener("click", () => player.toggleMute());
-    qs("#mini-open", root)?.addEventListener("click", () => setNowPlayingOpen(true));
+    root.querySelector('[data-mini-action="lyrics"]')?.addEventListener("click", () => openNowPlaying("lyrics"));
+    root.querySelector('[data-mini-action="queue"]')?.addEventListener("click", () => openNowPlaying("queue"));
+    root.querySelector('[data-mini-action="more"]')?.addEventListener("click", () => openNowPlaying("lyrics"));
+    const info = qs("#mini-open", root);
+    info?.addEventListener("click", () => {
+      if (!song) return;
+      setNowPlayingOpen(true);
+    });
+    info?.addEventListener("keydown", (event) => {
+      if (!song) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setNowPlayingOpen(true);
+      }
+    });
     const miniProgress = qs("#mini-progress", root);
     miniProgress?.addEventListener("pointerdown", () => miniDragging = true);
     miniProgress?.addEventListener("pointerup", () => miniDragging = false);
@@ -3683,6 +3724,10 @@
     const volume = qs(".volume-slider", root);
     volume?.addEventListener("input", (event) => player.setVolume(Number(event.target.value) / 100));
     updateProgressUI();
+  }
+  function openNowPlaying(tab) {
+    setNowPlayingOpen(true);
+    switchNpTab(tab);
   }
   function setNowPlayingOpen(open) {
     state.nowPlayingOpen = open;
@@ -3839,6 +3884,10 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     if (npDuration)
       npDuration.textContent = Number.isFinite(audio2.duration) ? formatTime(audio2.duration) : "0:00";
   }
+  function scrollLyricsToActive(container, node) {
+    const target = node.offsetTop - container.clientHeight / 2 + node.offsetHeight / 2 - container.scrollTop;
+    container.scrollBy({ top: target, behavior: "smooth" });
+  }
   function updateLyricsHighlight() {
     if (!state.nowPlayingOpen) return;
     const lyrics = state.lyrics;
@@ -3850,8 +3899,7 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     qsa(".lyrics-line", container).forEach((node) => {
       const isActive = Number(node.dataset.line) === index;
       node.classList.toggle("is-active", isActive);
-      if (isActive && Date.now() > lyricsHoldUntil)
-        node.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (isActive && Date.now() > lyricsHoldUntil) scrollLyricsToActive(container, node);
     });
   }
   function initPlayerView() {
@@ -3886,9 +3934,17 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     qs("#np-tab-lyrics", overlay)?.addEventListener("click", () => switchNpTab("lyrics"));
     qs("#np-tab-queue", overlay)?.addEventListener("click", () => switchNpTab("queue"));
     const lyricsContainer = qs("#np-lyrics", overlay);
-    lyricsContainer?.addEventListener("wheel", () => lyricsHoldUntil = Date.now() + 4e3, {
-      passive: true
-    });
+    lyricsContainer?.addEventListener(
+      "wheel",
+      (event) => {
+        lyricsHoldUntil = Date.now() + 4e3;
+        const { scrollTop, scrollHeight, clientHeight } = lyricsContainer;
+        const atTop = scrollTop <= 0 && event.deltaY < 0;
+        const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && event.deltaY > 0;
+        if (atTop || atBottom) event.preventDefault();
+      },
+      { passive: false }
+    );
     lyricsContainer?.addEventListener("click", (event) => {
       const line = event.target instanceof Element ? event.target.closest("[data-line]") : null;
       if (!line || !state.lyrics?.synced) return;
@@ -3913,6 +3969,8 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     if (!overlay) return;
     qs("#np-tab-lyrics", overlay)?.classList.toggle("is-selected", tab === "lyrics");
     qs("#np-tab-queue", overlay)?.classList.toggle("is-selected", tab === "queue");
+    qs("#np-tab-lyrics", overlay)?.setAttribute("aria-selected", String(tab === "lyrics"));
+    qs("#np-tab-queue", overlay)?.setAttribute("aria-selected", String(tab === "queue"));
     qs("#np-lyrics", overlay)?.classList.toggle("is-selected", tab === "lyrics");
     qs("#np-queue", overlay)?.classList.toggle("is-selected", tab === "queue");
   }
@@ -3981,9 +4039,7 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     const menu = qs("#account-menu");
     if (!menu) return;
     const account = state.account;
-    const hasAccountPlugin = state.plugins.some(
-      (plugin) => plugin.enabled && plugin.kind === "music-source" && plugin.capabilities.includes("account")
-    );
+    const hasAccountPlugin = Boolean(enabledAccountPlugin());
     const subtitle = account ? `${escapeHtml(installedPlugin(state.accountPluginId)?.name ?? "\u63D2\u4EF6\u8D26\u53F7")} \xB7 \u5DF2\u8FDE\u63A5` : hasAccountPlugin ? "\u767B\u5F55\u540E\u540C\u6B65\u8D26\u53F7\u5185\u5BB9" : "\u542F\u7528\u8D26\u53F7\u7C7B\u63D2\u4EF6\u540E\u53EF\u767B\u5F55";
     menu.innerHTML = `<div class="account-header">
       <span class="account-avatar-large">${account?.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt=""/>` : icon("person")}</span>
@@ -4182,31 +4238,6 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
       else if (event.key.toLowerCase() === "p") player.previous();
     });
   }
-  var BUILTIN_NETEASE_ID = "linmo.netease";
-  function seedBuiltinPlugins() {
-    if (state.plugins.some((plugin) => plugin.id === BUILTIN_NETEASE_ID)) return;
-    state.plugins = [
-      ...state.plugins,
-      {
-        packageVersion: 1,
-        id: BUILTIN_NETEASE_ID,
-        name: "\u7F51\u6613\u4E91\u97F3\u4E50",
-        version: "1.0.0",
-        hostApiVersion: "1",
-        kind: "music-source",
-        provider: "netease-api",
-        config: { baseUrl: "http://127.0.0.1:3000" },
-        capabilities: ["account", "playlists", "search", "playback", "lyrics", "recommendations"],
-        permissions: ["network", "secure-storage"],
-        grantedPermissions: ["network", "secure-storage"],
-        description: "\u5185\u7F6E\u7F51\u6613\u4E91\u97F3\u6E90\uFF1A\u626B\u7801\u767B\u5F55\u3001\u641C\u7D22\u64AD\u653E\u3001\u6B4C\u8BCD\u3001\u8D26\u53F7\u6B4C\u5355\u4E0E\u6BCF\u65E5\u63A8\u8350\u3002\u9700\u8981\u8FD0\u884C NeteaseCloudMusicApi \u4EE3\u7406\uFF0C\u670D\u52A1\u5730\u5740\u53EF\u5728\u4E0B\u65B9\u4FEE\u6539\u3002",
-        enabled: true,
-        status: "",
-        builtin: true
-      }
-    ];
-    persisters.plugins();
-  }
   async function boot() {
     installRipple();
     bindShell();
@@ -4227,7 +4258,6 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     ];
     topics.forEach((topic) => subscribe(topic, renderActivePage));
     subscribe("account", renderAccount);
-    seedBuiltinPlugins();
     await applyAppearance();
     await bootPlugins();
     await refreshAccount();

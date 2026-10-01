@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { validatePluginPackageManifest } from '../src/plugin-package.ts';
+import { isSafePluginVersion, validatePluginPackageManifest } from '../src/plugin-package.ts';
 
 const validMusicSource = {
   packageVersion: 1,
@@ -84,6 +84,24 @@ describe('plugin-package', () => {
           service: { entry: '../escape.mjs', port: 3000 },
         }),
       /service\.entry/,
+    );
+  });
+
+  it('rejects path-like plugin versions used as file names', () => {
+    assert.equal(isSafePluginVersion('1.0.0'), true);
+    assert.equal(isSafePluginVersion('1.2.3-beta.1+build'), true);
+    assert.equal(isSafePluginVersion('../escape'), false);
+    assert.equal(isSafePluginVersion('1.0.0/../../evil'), false);
+    assert.equal(isSafePluginVersion('1.0.0\\..\\evil'), false);
+    assert.equal(isSafePluginVersion('1.0.0-..'), false);
+    assert.equal(isSafePluginVersion(''), false);
+    assert.throws(
+      () =>
+        validatePluginPackageManifest({
+          ...validMusicSource,
+          version: '1.0.0/../../evil',
+        }),
+      /版本号/,
     );
   });
 });

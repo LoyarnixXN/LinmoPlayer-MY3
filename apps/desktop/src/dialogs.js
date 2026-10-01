@@ -1,6 +1,6 @@
 /** Modal dialogs: playlist management and plugin account login (QR + password). */
 
-import { state, persisters, publish } from './state.js';
+import { state, persisters, publish, enabledAccountPlugin } from './state.js';
 import {
   accountLogin,
   qrLoginStart,
@@ -45,17 +45,18 @@ export async function createPlaylistDialog() {
 export async function renamePlaylistDialog(playlistId) {
   const playlist = state.playlists.find((item) => String(item.id) === String(playlistId));
   if (!playlist) return;
+  const currentName = playlist.name ?? playlist.title ?? '';
   const layer = await openDialog({
     eyebrow: 'LOCAL PLAYLIST',
     title: '重命名歌单',
     body: `<label class="field"><span>歌单名称</span>
-      <input type="text" id="playlist-name" maxlength="60" value="${playlist.name.replace(/"/g, '&quot;')}" /></label>`,
+      <input type="text" id="playlist-name" maxlength="60" value="${escapeHtml(currentName).replace(/"/g, '&quot;')}" /></label>`,
     confirmLabel: '保存',
     cancelLabel: '取消',
   });
   if (!layer) return;
   const name = String(qs('#playlist-name', layer)?.value ?? '').trim();
-  if (!name || name === playlist.name) return;
+  if (!name || name === currentName) return;
   playlist.name = name;
   playlist.title = name;
   playlist.updatedAt = new Date().toISOString();
@@ -72,8 +73,10 @@ function loginDialogBody() {
     </div>
     <div class="login-panel is-selected" data-login-panel="qr">
       <div class="qr-stage" id="qr-stage"><span class="spinner"></span></div>
-      <p class="qr-status" id="qr-status">正在获取二维码…</p>
-      <button type="button" class="text-button" id="qr-refresh" hidden>${icon('refresh', 'button-icon')}刷新二维码</button>
+      <div class="qr-status-row" id="qr-status-row">
+        <p class="qr-status" id="qr-status">正在获取二维码…</p>
+        <button type="button" class="text-button" id="qr-refresh" hidden>${icon('refresh', 'button-icon')}刷新二维码</button>
+      </div>
       <p class="field-hint">${QR_HINT}</p>
     </div>
     <div class="login-panel" data-login-panel="password">
@@ -115,15 +118,18 @@ async function runQrFlow(layer) {
   const refresh = qs('#qr-refresh', layer);
   if (!stage || !status) return;
   const setStatus = (text) => (status.textContent = text);
+  const showFail = (error) => {
+    stage.innerHTML = `<div class="qr-error">${icon('error')}<span>二维码获取失败</span></div>`;
+    setStatus(error);
+    refresh.hidden = false;
+  };
   refresh.hidden = true;
   stage.innerHTML = '<span class="spinner"></span>';
   setStatus('正在获取二维码…');
   const start = await qrLoginStart();
   if (!alive()) return;
   if (!start.ok) {
-    stage.innerHTML = `<span class="qr-fail">${icon('error')}</span>`;
-    setStatus(start.error);
-    refresh.hidden = false;
+    showFail(start.error);
     return;
   }
   stage.innerHTML = start.value.qrDataUri
@@ -141,8 +147,7 @@ async function runQrFlow(layer) {
     }
     if (!alive()) return;
     if (!poll.ok) {
-      setStatus(poll.error);
-      refresh.hidden = false;
+      showFail(poll.error);
       return;
     }
     if (poll.value.state === 'scanned') setStatus('已扫码，请在手机上确认');
@@ -162,6 +167,11 @@ async function runQrFlow(layer) {
 }
 
 export async function loginDialog() {
+  const accountPlugin = enabledAccountPlugin();
+  if (!accountPlugin) {
+    snackbar('请先在插件中心启用账号类插件，再登录账号。');
+    return null;
+  }
   const wire = (layer) => {
     if (!layer) {
       qrFlowToken += 1;

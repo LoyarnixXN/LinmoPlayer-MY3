@@ -150,7 +150,7 @@ const PLUGIN_CAPABILITIES = new Set([
 ]);
 const PLUGIN_PERMISSIONS = new Set(['network', 'secure-storage', 'notifications', 'media-library']);
 const PLUGIN_PROVIDERS = new Set(['gdstudio', 'netease-api']);
-const PLUGIN_VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+const PLUGIN_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 function isSafePackagePath(value) {
   return (
@@ -160,6 +160,19 @@ function isSafePackagePath(value) {
     !value.startsWith('/') &&
     !value.includes('\\') &&
     !value.split('/').includes('..')
+  );
+}
+
+/** Version strings become on-disk file names — reject any path-like content. */
+function isSafePluginVersion(version) {
+  return (
+    typeof version === 'string' &&
+    version.length > 0 &&
+    version.length <= 64 &&
+    PLUGIN_VERSION_RE.test(version) &&
+    !version.includes('/') &&
+    !version.includes('\\') &&
+    !version.includes('..')
   );
 }
 
@@ -189,12 +202,12 @@ function validatePluginPackagePayload(manifestRaw, fileNames) {
     typeof manifest.name !== 'string' ||
     !manifest.name.trim() ||
     typeof manifest.version !== 'string' ||
-    !PLUGIN_VERSION_RE.test(manifest.version.trim()) ||
+    !isSafePluginVersion(manifest.version.trim()) ||
     typeof manifest.hostApiVersion !== 'string' ||
     manifest.hostApiVersion.split('.')[0] !== HOST_API_MAJOR
   ) {
     throw new Error(
-      '插件包清单无效：需要 packageVersion=1、合法 ID、名称、语义化版本（x.y.z）和兼容的宿主 API 版本。',
+      '插件包清单无效：需要 packageVersion=1、合法 ID、名称、安全版本号（x.y.z，禁止路径字符）和兼容的宿主 API 版本。',
     );
   }
 
@@ -334,9 +347,13 @@ ipcMain.handle('library:pick-folder', async (event) => {
 });
 
 /**
- * Install a declarative plugin ZIP: validate archive safety + full manifest
- * in the main process BEFORE any write, stage files, then publish to
- * userData/plugins/<id>/. Records sha256 integrity and keeps one backup.
+ * Install a declarative plugin ZIP.
+ *
+ * Security order (must stay this order):
+ * 1) Parse + full-validate manifest/package in memory (id/version/kind/permissions/service/theme/font).
+ * 2) Only after validation succeeds, stage files under pluginsRoot/.staging-*.
+ * 3) Publish staged files into userData/plugins/<id>/ with backup; clean staging always.
+ * Invalid packages never create or mutate the final plugin directory.
  */
 ipcMain.handle('plugin:install', (_event, bytes) => {
   const zip = new AdmZip(Buffer.from(bytes));
@@ -358,11 +375,16 @@ ipcMain.handle('plugin:install', (_event, bytes) => {
   );
   if (!manifestEntry) throw new Error('插件 ZIP 根目录必须包含 plugin.json。');
 
-  // Full validation before touching disk (id/version/kind/permissions/service/theme/font).
-  const manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
-  const resolved = validatePluginPackagePayload(manifest, names);
+  // Full validation in memory BEFORE any disk write.
+  let resolved;
+  try {
+    const manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
+    resolved = validatePluginPackagePayload(manifest, names);
+  } catch (error) {
+    throw new Error(`插件包校验失败：${error instanceof Error ? error.message : String(error)}`);
+  }
   const version = String(resolved.version).trim();
-  if (!PLUGIN_VERSION_RE.test(version)) throw new Error('插件包清单无效：版本号格式非法。');
+  if (!isSafePluginVersion(version)) throw new Error('插件包清单无效：版本号格式非法。');
   const zipName = `${version}.zip`;
 
   const pluginDirectory = path.join(pluginsRoot(), resolved.id);
@@ -378,6 +400,7 @@ ipcMain.handle('plugin:install', (_event, bytes) => {
     pluginsRoot(),
     `.staging-${resolved.id}-${crypto.randomBytes(6).toString('hex')}`,
   );
+  if (!isInsideDirectory(pluginsRoot(), staging)) throw new Error('插件安装路径非法。');
   const stagingFiles = path.join(staging, 'files');
   try {
     fs.mkdirSync(stagingFiles, { recursive: true });
@@ -399,29 +422,47 @@ ipcMain.handle('plugin:install', (_event, bytes) => {
       fileName: zipName,
     });
 
+    // Publish only after staging is complete.
     fs.mkdirSync(pluginDirectory, { recursive: true });
     const filesDirectory = path.join(pluginDirectory, 'files');
-    if (fs.existsSync(filesDirectory)) {
-      const backupDirectory = path.join(pluginDirectory, 'backup');
-      fs.rmSync(backupDirectory, { recursive: true, force: true });
-      fs.mkdirSync(backupDirectory, { recursive: true });
-      copyDirectorySync(filesDirectory, backupDirectory);
-      if (previousIntegrity)
-        fs.writeFileSync(
-          path.join(backupDirectory, '.previous-version.json'),
-          JSON.stringify({
-            version: previousIntegrity.version,
-            fileName: previousIntegrity.fileName,
-          }),
-        );
-    }
-    fs.rmSync(filesDirectory, { recursive: true, force: true });
-    fs.renameSync(stagingFiles, filesDirectory);
-    fs.copyFileSync(path.join(staging, zipName), zipPath);
-    fs.copyFileSync(
-      path.join(staging, 'integrity.json'),
-      path.join(pluginDirectory, 'integrity.json'),
+    const publishTemp = path.join(
+      pluginDirectory,
+      `.files-new-${crypto.randomBytes(4).toString('hex')}`,
     );
+    try {
+      if (fs.existsSync(filesDirectory)) {
+        const backupDirectory = path.join(pluginDirectory, 'backup');
+        fs.rmSync(backupDirectory, { recursive: true, force: true });
+        fs.mkdirSync(backupDirectory, { recursive: true });
+        copyDirectorySync(filesDirectory, backupDirectory);
+        if (previousIntegrity)
+          fs.writeFileSync(
+            path.join(backupDirectory, '.previous-version.json'),
+            JSON.stringify({
+              version: previousIntegrity.version,
+              fileName: previousIntegrity.fileName,
+            }),
+          );
+      }
+      // Move staged tree into a temp name inside pluginDirectory, then swap.
+      fs.renameSync(stagingFiles, publishTemp);
+      fs.rmSync(filesDirectory, { recursive: true, force: true });
+      fs.renameSync(publishTemp, filesDirectory);
+      fs.copyFileSync(path.join(staging, zipName), zipPath);
+      fs.copyFileSync(
+        path.join(staging, 'integrity.json'),
+        path.join(pluginDirectory, 'integrity.json'),
+      );
+    } catch (publishError) {
+      // Best-effort restore of previous files if the swap failed mid-way.
+      if (fs.existsSync(publishTemp)) fs.rmSync(publishTemp, { recursive: true, force: true });
+      const backupDirectory = path.join(pluginDirectory, 'backup');
+      if (fs.existsSync(backupDirectory) && !fs.existsSync(filesDirectory)) {
+        fs.mkdirSync(filesDirectory, { recursive: true });
+        copyDirectorySync(backupDirectory, filesDirectory);
+      }
+      throw publishError;
+    }
   } finally {
     fs.rmSync(staging, { recursive: true, force: true });
   }
