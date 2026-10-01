@@ -4,7 +4,8 @@ import { state, publish, persisters, patchSettings, QUALITIES, PLAYBACK_MODES } 
 import { enablePlugin, disablePlugin, uninstallPlugin } from './core-bridge.js';
 import { applyThemePlugin, applyFontPluginSelection } from './theme.js';
 import { icon } from './icons.js';
-import { qs, escapeHtml, snackbar, confirmDialog } from './ui.js';
+import { qs, escapeHtml, snackbar, confirmDialog, openDialog } from './ui.js';
+import { PLUGIN_PERMISSION_LABELS, missingPermissions } from '../../../packages/core/src/index.ts';
 
 const KIND_LABELS = { 'music-source': '音源', theme: '主题', font: '字体' };
 const KIND_ICONS = { 'music-source': 'plugins', theme: 'palette', font: 'font' };
@@ -16,6 +17,99 @@ const CAPABILITY_LABELS = {
   account: '账号',
   recommendations: '推荐',
 };
+
+function permissionLabel(key) {
+  return PLUGIN_PERMISSION_LABELS[key] ?? key;
+}
+
+function permissionChips(plugin) {
+  const declared = plugin.permissions ?? [];
+  if (!declared.length) return '';
+  const granted = new Set(plugin.grantedPermissions ?? []);
+  return `<div class="plugin-caps">${declared
+    .map(
+      (key) =>
+        `<span class="cap-chip ${granted.has(key) ? '' : 'is-pending'}">${escapeHtml(permissionLabel(key))}${granted.has(key) ? '' : ' · 未授权'}</span>`,
+    )
+    .join('')}</div>`;
+}
+
+export async function grantPluginPermissions(pluginId) {
+  const plugin = state.plugins.find((item) => item.id === pluginId);
+  if (!plugin) return false;
+  const declared = plugin.permissions ?? [];
+  if (!declared.length) return true;
+  const body = `<p class="field-hint">该插件申请以下权限。仅在你信任来源时授权。</p>
+    <div class="permission-list">${declared
+      .map(
+        (key) =>
+          `<label class="permission-row"><input type="checkbox" data-perm="${escapeHtml(key)}" checked/><span>${escapeHtml(permissionLabel(key))}<small>${escapeHtml(permHint(key))}</small></span></label>`,
+      )
+      .join('')}</div>`;
+  const result = await openDialog({
+    eyebrow: 'PERMISSIONS',
+    title: `授权「${plugin.name}」？`,
+    body,
+    confirmLabel: '授权所选',
+    cancelLabel: '取消',
+    danger: true,
+  });
+  if (!result) return false;
+  const granted = [...result.querySelectorAll('[data-perm]:checked')].map(
+    (node) => node.dataset.perm,
+  );
+  plugin.grantedPermissions = granted;
+  if (missingPermissions(declared, granted).length) {
+    snackbar('未授予全部所需权限，插件无法启用。');
+    persisters.plugins();
+    publish('plugins');
+    return false;
+  }
+  persisters.plugins();
+  publish('plugins');
+  snackbar(`已授权「${plugin.name}」的权限`);
+  return true;
+}
+
+function permHint(key) {
+  return (
+    {
+      network: '访问网络以搜索、登录和拉取封面/歌词',
+      'secure-storage': '在本机加密保存登录态等敏感数据',
+      notifications: '在系统通知中显示切歌信息',
+      'media-library': '读取你选择的本地音乐文件',
+    }[key] ?? ''
+  );
+}
+
+export async function verifyPluginIntegrity(pluginId) {
+  try {
+    const result = await window.linmoDesktop?.plugins?.verifyIntegrity?.(pluginId);
+    if (!result) throw new Error('完整性接口不可用');
+    if (!result.ok) snackbar(result.error ?? '完整性校验失败');
+    else snackbar(`完整性正常 · v${result.version}`);
+  } catch (error) {
+    snackbar(error instanceof Error ? error.message : '完整性校验失败');
+  }
+}
+
+export async function rollbackPlugin(pluginId) {
+  const plugin = state.plugins.find((item) => item.id === pluginId);
+  if (!plugin) return;
+  const confirmed = await confirmDialog(
+    '回滚插件',
+    `将「${plugin.name}」回滚到上一安装版本？当前解包文件会被覆盖。`,
+    '回滚',
+  );
+  if (!confirmed) return;
+  try {
+    const result = await window.linmoDesktop?.plugins?.rollback?.(pluginId);
+    if (!result?.ok) throw new Error(result?.error ?? '回滚失败');
+    snackbar(`已回滚到 v${result.version}，请重新导入或重启应用以刷新元数据`);
+  } catch (error) {
+    snackbar(error instanceof Error ? error.message : '回滚失败');
+  }
+}
 
 export function renderPlugins() {
   const root = qs('#page-plugins');
@@ -72,9 +166,22 @@ export function renderPlugins() {
         </div>
         <p class="plugin-description">${escapeHtml(plugin.description || '未提供插件说明。')}</p>
         <div class="plugin-caps">${caps}</div>
+        ${permissionChips(plugin)}
         ${configNote}${errorNote}
         <div class="plugin-actions">
           ${kindAction}
+          ${
+            (plugin.permissions ?? []).length &&
+            missingPermissions(plugin.permissions, plugin.grantedPermissions).length
+              ? `<button type="button" class="tonal-button ripple small" data-plugin-grant="${escapeHtml(plugin.id)}">${icon('login', 'button-icon')}授权权限</button>`
+              : ''
+          }
+          ${
+            plugin.kind === 'music-source' && !plugin.builtin
+              ? `<button type="button" class="text-button" data-plugin-verify="${escapeHtml(plugin.id)}">校验完整性</button>
+               <button type="button" class="text-button" data-plugin-rollback="${escapeHtml(plugin.id)}">回滚版本</button>`
+              : ''
+          }
           ${plugin.builtin ? '' : `<button type="button" class="text-button danger-text" data-plugin-uninstall="${escapeHtml(plugin.id)}">${icon('delete', 'button-icon')}卸载</button>`}
         </div>
       </article>`;
@@ -93,6 +200,21 @@ export function renderPlugins() {
   root.querySelectorAll('[data-plugin-toggle]').forEach((input) =>
     input.addEventListener('change', () => {
       void togglePlugin(input.dataset.pluginToggle, input.checked);
+    }),
+  );
+  root.querySelectorAll('[data-plugin-grant]').forEach((button) =>
+    button.addEventListener('click', () => {
+      void grantPluginPermissions(button.dataset.pluginGrant);
+    }),
+  );
+  root.querySelectorAll('[data-plugin-verify]').forEach((button) =>
+    button.addEventListener('click', () => {
+      void verifyPluginIntegrity(button.dataset.pluginVerify);
+    }),
+  );
+  root.querySelectorAll('[data-plugin-rollback]').forEach((button) =>
+    button.addEventListener('click', () => {
+      void rollbackPlugin(button.dataset.pluginRollback);
     }),
   );
   root.querySelectorAll('[data-plugin-theme]').forEach((button) =>
@@ -143,6 +265,13 @@ async function togglePlugin(pluginId, nextEnabled) {
   const meta = state.plugins.find((plugin) => plugin.id === pluginId);
   if (!meta) return;
   if (nextEnabled) {
+    if (missingPermissions(meta.permissions, meta.grantedPermissions).length) {
+      const granted = await grantPluginPermissions(pluginId);
+      if (!granted) {
+        publish('plugins');
+        return;
+      }
+    }
     const result = await enablePlugin(pluginId);
     if (!result.ok) {
       snackbar(`启用失败：${result.error}`);

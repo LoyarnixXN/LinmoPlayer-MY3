@@ -1,4 +1,4 @@
-import type { PlaybackResource, UnifiedSong } from './models';
+import type { PlaybackResource, UnifiedSong } from './models.ts';
 
 export interface AudioEngine {
   load(resource: PlaybackResource): Promise<void>;
@@ -32,7 +32,11 @@ export class PlayerController {
     errorMessage: null,
   };
 
-  public constructor(private readonly audio: AudioEngine) {}
+  private readonly audio: AudioEngine;
+
+  public constructor(audio: AudioEngine) {
+    this.audio = audio;
+  }
 
   public getState(): PlayerSnapshot {
     return this.snapshot;

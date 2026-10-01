@@ -1,0 +1,13 @@
+{
+  "name": "@linmo/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Linmo Player mobile-first web shell reusing @linmo/core.",
+  "scripts": {
+    "build": "esbuild src/app.js --bundle --format=iife --platform=browser --outfile=dist/app.js",
+    "start": "npm run build && npx --yes serve ."
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  }
+}

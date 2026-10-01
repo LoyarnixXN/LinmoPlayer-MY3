@@ -1,6 +1,6 @@
-import type { PluginCapability, PluginContext, MusicPlugin } from './plugin-contract';
-import { HOST_API_VERSION } from './plugin-contract';
-import type { PluginId } from './models';
+import type { PluginCapability, PluginContext, MusicPlugin } from './plugin-contract.ts';
+import { HOST_API_VERSION } from './plugin-contract.ts';
+import type { PluginId } from './models.ts';
 
 export type PluginStatus = 'registered' | 'enabled' | 'disabled' | 'error';
 
@@ -34,8 +34,11 @@ const noopLogger: PluginLogger = {
 
 export class PluginRegistry {
   private readonly records = new Map<PluginId, PluginRecord>();
+  private readonly logger: PluginLogger;
 
-  public constructor(private readonly logger: PluginLogger = noopLogger) {}
+  public constructor(logger: PluginLogger = noopLogger) {
+    this.logger = logger;
+  }
 
   public register(plugin: MusicPlugin): PluginCallResult<void> {
     const validationError = validateManifest(plugin);

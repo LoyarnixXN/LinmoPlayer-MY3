@@ -1,6 +1,6 @@
-import type { PlaybackQuality, MusicPlugin, UnifiedSong } from './index';
-import type { PlaybackResource } from './models';
-import type { PluginRegistry } from './plugin-registry';
+import type { PlaybackQuality, MusicPlugin, UnifiedSong } from './index.ts';
+import type { PlaybackResource } from './models.ts';
+import type { PluginRegistry } from './plugin-registry.ts';
 
 /**
  * Multi-source completion.
@@ -81,7 +81,11 @@ export function scoreSongMatch(candidate: UnifiedSong, target: UnifiedSong): num
 }
 
 export class SourceAggregator {
-  public constructor(private readonly registry: PluginRegistry) {}
+  private readonly registry: PluginRegistry;
+
+  public constructor(registry: PluginRegistry) {
+    this.registry = registry;
+  }
 
   private enabledSourcePlugins(excludePluginId?: string): readonly MusicPlugin[] {
     return this.registry
@@ -211,7 +215,7 @@ async function safeListSources(plugin: MusicPlugin): Promise<readonly string[] |
 
 function toUnifiedFromPlugin(
   plugin: MusicPlugin,
-  item: import('./plugin-contract').PluginSong,
+  item: import('./plugin-contract.ts').PluginSong,
 ): UnifiedSong {
   const sourceId = plugin.manifest.id;
   return {

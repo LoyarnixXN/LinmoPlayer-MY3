@@ -1,5 +1,10 @@
-import type { PluginCapability, PluginKind, PluginManifest } from './plugin-contract';
-import { PLUGIN_CAPABILITIES, HOST_API_VERSION } from './plugin-contract';
+import type {
+  PluginCapability,
+  PluginKind,
+  PluginManifest,
+  PluginPermission,
+} from './plugin-contract.ts';
+import { PLUGIN_CAPABILITIES, HOST_API_VERSION, normalizePermissions } from './plugin-contract.ts';
 
 export const PLUGIN_PACKAGE_VERSION = 1;
 export const PLUGIN_ENTRY_LIMIT = 128;
@@ -23,7 +28,7 @@ export interface PluginPackageManifest extends PluginManifest {
   readonly config?: Readonly<Record<string, unknown>>;
   readonly theme?: PluginThemeSpec;
   readonly font?: PluginFontSpec;
-  readonly permissions?: readonly string[];
+  readonly permissions?: readonly PluginPermission[];
 }
 
 export interface PluginPackageFile {
@@ -82,6 +87,12 @@ export function validatePluginPackageManifest(input: unknown): PluginPackageMani
     throw new Error('插件声明了未支持的能力。');
   }
 
+  const permissions = normalizePermissions(manifest.permissions);
+  const declaredRaw = Array.isArray(manifest.permissions) ? manifest.permissions : [];
+  if (declaredRaw.some((item) => typeof item !== 'string' || !isKnownPermission(item))) {
+    throw new Error('插件声明了未支持的权限。');
+  }
+
   const base = {
     packageVersion: 1 as const,
     id: manifest.id,
@@ -92,10 +103,7 @@ export function validatePluginPackageManifest(input: unknown): PluginPackageMani
     ...(typeof manifest.description === 'string'
       ? { description: manifest.description.trim() }
       : {}),
-    ...(Array.isArray(manifest.permissions) &&
-    manifest.permissions.every((item) => typeof item === 'string')
-      ? { permissions: manifest.permissions }
-      : {}),
+    ...(permissions.length ? { permissions } : {}),
   };
 
   if (kind === 'music-source') {
@@ -169,6 +177,15 @@ export const KNOWN_PROVIDERS = ['gdstudio', 'netease-api'] as const;
 
 function isKnownProvider(value: string): boolean {
   return (KNOWN_PROVIDERS as readonly string[]).includes(value);
+}
+
+function isKnownPermission(value: string): boolean {
+  return (
+    value === 'network' ||
+    value === 'secure-storage' ||
+    value === 'notifications' ||
+    value === 'media-library'
+  );
 }
 
 function isSafePackagePath(value: string): boolean {

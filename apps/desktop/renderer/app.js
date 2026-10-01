@@ -100,8 +100,30 @@
     }
   });
 
+  // ../../packages/core/src/package-integrity.ts
+  function missingPermissions(declared, granted) {
+    const grantedSet = new Set(granted ?? []);
+    return (declared ?? []).filter((item) => !grantedSet.has(item));
+  }
+  var init_package_integrity = __esm({
+    "../../packages/core/src/package-integrity.ts"() {
+      "use strict";
+    }
+  });
+
   // ../../packages/core/src/plugin-contract.ts
-  var HOST_API_VERSION, PLUGIN_CAPABILITIES;
+  function isPluginPermission(value) {
+    return typeof value === "string" && PLUGIN_PERMISSIONS.includes(value);
+  }
+  function normalizePermissions(input) {
+    if (!Array.isArray(input)) return [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const item of input) {
+      if (isPluginPermission(item)) seen.add(item);
+    }
+    return [...seen];
+  }
+  var HOST_API_VERSION, PLUGIN_CAPABILITIES, PLUGIN_PERMISSIONS, PLUGIN_PERMISSION_LABELS;
   var init_plugin_contract = __esm({
     "../../packages/core/src/plugin-contract.ts"() {
       "use strict";
@@ -114,6 +136,18 @@
         "account",
         "recommendations"
       ];
+      PLUGIN_PERMISSIONS = [
+        "network",
+        "secure-storage",
+        "notifications",
+        "media-library"
+      ];
+      PLUGIN_PERMISSION_LABELS = {
+        network: "\u7F51\u7EDC\u8BBF\u95EE",
+        "secure-storage": "\u5B89\u5168\u5B58\u50A8",
+        notifications: "\u684C\u9762\u901A\u77E5",
+        "media-library": "\u5A92\u4F53\u5E93"
+      };
     }
   });
 
@@ -149,10 +183,11 @@
         error: () => void 0
       };
       PluginRegistry = class {
+        records = /* @__PURE__ */ new Map();
+        logger;
         constructor(logger = noopLogger) {
           this.logger = logger;
         }
-        records = /* @__PURE__ */ new Map();
         register(plugin) {
           const validationError = validateManifest(plugin);
           if (validationError) {
@@ -265,6 +300,11 @@
     } else if (Array.isArray(capabilities) && capabilities.some((item) => !isCapability(item))) {
       throw new Error("\u63D2\u4EF6\u58F0\u660E\u4E86\u672A\u652F\u6301\u7684\u80FD\u529B\u3002");
     }
+    const permissions = normalizePermissions(manifest.permissions);
+    const declaredRaw = Array.isArray(manifest.permissions) ? manifest.permissions : [];
+    if (declaredRaw.some((item) => typeof item !== "string" || !isKnownPermission(item))) {
+      throw new Error("\u63D2\u4EF6\u58F0\u660E\u4E86\u672A\u652F\u6301\u7684\u6743\u9650\u3002");
+    }
     const base = {
       packageVersion: 1,
       id: manifest.id,
@@ -273,7 +313,7 @@
       hostApiVersion: manifest.hostApiVersion,
       kind,
       ...typeof manifest.description === "string" ? { description: manifest.description.trim() } : {},
-      ...Array.isArray(manifest.permissions) && manifest.permissions.every((item) => typeof item === "string") ? { permissions: manifest.permissions } : {}
+      ...permissions.length ? { permissions } : {}
     };
     if (kind === "music-source") {
       return {
@@ -306,6 +346,9 @@
   }
   function isKnownProvider(value) {
     return KNOWN_PROVIDERS.includes(value);
+  }
+  function isKnownPermission(value) {
+    return value === "network" || value === "secure-storage" || value === "notifications" || value === "media-library";
   }
   function isSafePackagePath(value) {
     return value.length > 0 && value.length <= 240 && !value.startsWith("/") && !value.includes("\\") && !value.split("/").includes("..");
@@ -945,6 +988,7 @@
     "../../packages/core/src/source-aggregator.ts"() {
       "use strict";
       SourceAggregator = class {
+        registry;
         constructor(registry2) {
           this.registry = registry2;
         }
@@ -1055,6 +1099,7 @@
       "use strict";
       init_audio_engine();
       init_models();
+      init_package_integrity();
       init_playlist_aggregator();
       init_plugin_contract();
       init_plugin_registry();
@@ -1222,8 +1267,19 @@
       }
     };
   }
+  function ensurePermissions(meta) {
+    const missing = missingPermissions(meta.permissions, meta.grantedPermissions);
+    if (missing.length) {
+      meta.status = "error";
+      meta.lastError = `\u7F3A\u5C11\u6743\u9650\u6388\u6743\uFF1A${missing.join("\u3001")}\u3002\u8BF7\u5728\u63D2\u4EF6\u5361\u7247\u4E2D\u6388\u6743\u540E\u91CD\u8BD5\u3002`;
+      return { ok: false, error: meta.lastError };
+    }
+    return null;
+  }
   async function startPlugin(meta) {
     if (meta.kind !== "music-source") return { ok: true };
+    const denied = ensurePermissions(meta);
+    if (denied) return denied;
     try {
       const plugin = createMusicSourcePlugin(manifestOf(meta));
       const registered = registry.register(plugin);
@@ -1244,12 +1300,28 @@
     }
   }
   function manifestOf(meta) {
-    const { id, name, version, hostApiVersion, kind, provider, config, capabilities } = meta;
-    return { id, name, version, hostApiVersion, kind, provider, config, capabilities };
+    const { id, name, version, hostApiVersion, kind, provider, config, capabilities, permissions } = meta;
+    return {
+      id,
+      name,
+      version,
+      hostApiVersion,
+      kind,
+      provider,
+      config,
+      capabilities,
+      ...permissions ? { permissions } : {}
+    };
   }
   async function enablePlugin(pluginId) {
     const meta = installedPlugin(pluginId);
     if (!meta) return { ok: false, error: "\u63D2\u4EF6\u4E0D\u5B58\u5728\u3002" };
+    const denied = ensurePermissions(meta);
+    if (denied) {
+      persisters.plugins();
+      publish("plugins");
+      return denied;
+    }
     meta.enabled = true;
     const result = await startPlugin(meta);
     persisters.plugins();
@@ -1831,7 +1903,7 @@
         error: "#F2B8B5",
         scrim: "#000000"
       };
-      DEFAULT_FONT_STACK = "'MiSans', 'MiSans VF', 'Google Sans', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
+      DEFAULT_FONT_STACK = "'MiSans', 'MiSans VF', 'Inter', 'Google Sans', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
       installedThemePlugins = () => state.plugins.filter((plugin) => plugin.kind === "theme");
       installedFontPlugins = () => state.plugins.filter((plugin) => plugin.kind === "font");
     }
@@ -3132,6 +3204,7 @@
   init_theme();
   init_icons();
   init_ui();
+  init_src();
   var KIND_LABELS = { "music-source": "\u97F3\u6E90", theme: "\u4E3B\u9898", font: "\u5B57\u4F53" };
   var KIND_ICONS = { "music-source": "plugins", theme: "palette", font: "font" };
   var CAPABILITY_LABELS = {
@@ -3142,6 +3215,85 @@
     account: "\u8D26\u53F7",
     recommendations: "\u63A8\u8350"
   };
+  function permissionLabel(key) {
+    return PLUGIN_PERMISSION_LABELS[key] ?? key;
+  }
+  function permissionChips(plugin) {
+    const declared = plugin.permissions ?? [];
+    if (!declared.length) return "";
+    const granted = new Set(plugin.grantedPermissions ?? []);
+    return `<div class="plugin-caps">${declared.map(
+      (key) => `<span class="cap-chip ${granted.has(key) ? "" : "is-pending"}">${escapeHtml(permissionLabel(key))}${granted.has(key) ? "" : " \xB7 \u672A\u6388\u6743"}</span>`
+    ).join("")}</div>`;
+  }
+  async function grantPluginPermissions(pluginId) {
+    const plugin = state.plugins.find((item) => item.id === pluginId);
+    if (!plugin) return false;
+    const declared = plugin.permissions ?? [];
+    if (!declared.length) return true;
+    const body = `<p class="field-hint">\u8BE5\u63D2\u4EF6\u7533\u8BF7\u4EE5\u4E0B\u6743\u9650\u3002\u4EC5\u5728\u4F60\u4FE1\u4EFB\u6765\u6E90\u65F6\u6388\u6743\u3002</p>
+    <div class="permission-list">${declared.map(
+      (key) => `<label class="permission-row"><input type="checkbox" data-perm="${escapeHtml(key)}" checked/><span>${escapeHtml(permissionLabel(key))}<small>${escapeHtml(permHint(key))}</small></span></label>`
+    ).join("")}</div>`;
+    const result = await openDialog({
+      eyebrow: "PERMISSIONS",
+      title: `\u6388\u6743\u300C${plugin.name}\u300D\uFF1F`,
+      body,
+      confirmLabel: "\u6388\u6743\u6240\u9009",
+      cancelLabel: "\u53D6\u6D88",
+      danger: true
+    });
+    if (!result) return false;
+    const granted = [...result.querySelectorAll("[data-perm]:checked")].map(
+      (node) => node.dataset.perm
+    );
+    plugin.grantedPermissions = granted;
+    if (missingPermissions(declared, granted).length) {
+      snackbar("\u672A\u6388\u4E88\u5168\u90E8\u6240\u9700\u6743\u9650\uFF0C\u63D2\u4EF6\u65E0\u6CD5\u542F\u7528\u3002");
+      persisters.plugins();
+      publish("plugins");
+      return false;
+    }
+    persisters.plugins();
+    publish("plugins");
+    snackbar(`\u5DF2\u6388\u6743\u300C${plugin.name}\u300D\u7684\u6743\u9650`);
+    return true;
+  }
+  function permHint(key) {
+    return {
+      network: "\u8BBF\u95EE\u7F51\u7EDC\u4EE5\u641C\u7D22\u3001\u767B\u5F55\u548C\u62C9\u53D6\u5C01\u9762/\u6B4C\u8BCD",
+      "secure-storage": "\u5728\u672C\u673A\u52A0\u5BC6\u4FDD\u5B58\u767B\u5F55\u6001\u7B49\u654F\u611F\u6570\u636E",
+      notifications: "\u5728\u7CFB\u7EDF\u901A\u77E5\u4E2D\u663E\u793A\u5207\u6B4C\u4FE1\u606F",
+      "media-library": "\u8BFB\u53D6\u4F60\u9009\u62E9\u7684\u672C\u5730\u97F3\u4E50\u6587\u4EF6"
+    }[key] ?? "";
+  }
+  async function verifyPluginIntegrity(pluginId) {
+    try {
+      const result = await window.linmoDesktop?.plugins?.verifyIntegrity?.(pluginId);
+      if (!result) throw new Error("\u5B8C\u6574\u6027\u63A5\u53E3\u4E0D\u53EF\u7528");
+      if (!result.ok) snackbar(result.error ?? "\u5B8C\u6574\u6027\u6821\u9A8C\u5931\u8D25");
+      else snackbar(`\u5B8C\u6574\u6027\u6B63\u5E38 \xB7 v${result.version}`);
+    } catch (error) {
+      snackbar(error instanceof Error ? error.message : "\u5B8C\u6574\u6027\u6821\u9A8C\u5931\u8D25");
+    }
+  }
+  async function rollbackPlugin(pluginId) {
+    const plugin = state.plugins.find((item) => item.id === pluginId);
+    if (!plugin) return;
+    const confirmed = await confirmDialog(
+      "\u56DE\u6EDA\u63D2\u4EF6",
+      `\u5C06\u300C${plugin.name}\u300D\u56DE\u6EDA\u5230\u4E0A\u4E00\u5B89\u88C5\u7248\u672C\uFF1F\u5F53\u524D\u89E3\u5305\u6587\u4EF6\u4F1A\u88AB\u8986\u76D6\u3002`,
+      "\u56DE\u6EDA"
+    );
+    if (!confirmed) return;
+    try {
+      const result = await window.linmoDesktop?.plugins?.rollback?.(pluginId);
+      if (!result?.ok) throw new Error(result?.error ?? "\u56DE\u6EDA\u5931\u8D25");
+      snackbar(`\u5DF2\u56DE\u6EDA\u5230 v${result.version}\uFF0C\u8BF7\u91CD\u65B0\u5BFC\u5165\u6216\u91CD\u542F\u5E94\u7528\u4EE5\u5237\u65B0\u5143\u6570\u636E`);
+    } catch (error) {
+      snackbar(error instanceof Error ? error.message : "\u56DE\u6EDA\u5931\u8D25");
+    }
+  }
   function renderPlugins() {
     const root = qs("#page-plugins");
     if (!root) return;
@@ -3178,9 +3330,13 @@
         </div>
         <p class="plugin-description">${escapeHtml(plugin.description || "\u672A\u63D0\u4F9B\u63D2\u4EF6\u8BF4\u660E\u3002")}</p>
         <div class="plugin-caps">${caps}</div>
+        ${permissionChips(plugin)}
         ${configNote}${errorNote}
         <div class="plugin-actions">
           ${kindAction}
+          ${(plugin.permissions ?? []).length && missingPermissions(plugin.permissions, plugin.grantedPermissions).length ? `<button type="button" class="tonal-button ripple small" data-plugin-grant="${escapeHtml(plugin.id)}">${icon("login", "button-icon")}\u6388\u6743\u6743\u9650</button>` : ""}
+          ${plugin.kind === "music-source" && !plugin.builtin ? `<button type="button" class="text-button" data-plugin-verify="${escapeHtml(plugin.id)}">\u6821\u9A8C\u5B8C\u6574\u6027</button>
+               <button type="button" class="text-button" data-plugin-rollback="${escapeHtml(plugin.id)}">\u56DE\u6EDA\u7248\u672C</button>` : ""}
           ${plugin.builtin ? "" : `<button type="button" class="text-button danger-text" data-plugin-uninstall="${escapeHtml(plugin.id)}">${icon("delete", "button-icon")}\u5378\u8F7D</button>`}
         </div>
       </article>`;
@@ -3194,6 +3350,21 @@
     root.querySelectorAll("[data-plugin-toggle]").forEach(
       (input) => input.addEventListener("change", () => {
         void togglePlugin(input.dataset.pluginToggle, input.checked);
+      })
+    );
+    root.querySelectorAll("[data-plugin-grant]").forEach(
+      (button) => button.addEventListener("click", () => {
+        void grantPluginPermissions(button.dataset.pluginGrant);
+      })
+    );
+    root.querySelectorAll("[data-plugin-verify]").forEach(
+      (button) => button.addEventListener("click", () => {
+        void verifyPluginIntegrity(button.dataset.pluginVerify);
+      })
+    );
+    root.querySelectorAll("[data-plugin-rollback]").forEach(
+      (button) => button.addEventListener("click", () => {
+        void rollbackPlugin(button.dataset.pluginRollback);
       })
     );
     root.querySelectorAll("[data-plugin-theme]").forEach(
@@ -3240,6 +3411,13 @@
     const meta = state.plugins.find((plugin) => plugin.id === pluginId);
     if (!meta) return;
     if (nextEnabled) {
+      if (missingPermissions(meta.permissions, meta.grantedPermissions).length) {
+        const granted = await grantPluginPermissions(pluginId);
+        if (!granted) {
+          publish("plugins");
+          return;
+        }
+      }
       const result = await enablePlugin(pluginId);
       if (!result.ok) {
         snackbar(`\u542F\u7528\u5931\u8D25\uFF1A${result.error}`);
@@ -3822,11 +4000,29 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
         throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u4E3B\u9898\u6587\u4EF6\uFF1A${manifest.theme.entry}`);
       if (manifest.kind === "font" && !installed.fileNames.includes(manifest.font.file))
         throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u5B57\u4F53\u6587\u4EF6\uFF1A${manifest.font.file}`);
-      const meta = { ...manifest, enabled: false, status: "" };
+      const previous = state.plugins.find((plugin) => plugin.id === manifest.id);
+      const meta = {
+        ...manifest,
+        enabled: false,
+        status: "",
+        grantedPermissions: previous?.grantedPermissions ?? [],
+        ...installed.integrity ? {
+          integrity: {
+            checksum: installed.integrity.checksum,
+            version: installed.integrity.version
+          }
+        } : {}
+      };
+      if (installed.integrity?.direction === "downgrade")
+        snackbar(`\u6CE8\u610F\uFF1A\u6B63\u5728\u5B89\u88C5\u4F4E\u4E8E\u5DF2\u5B89\u88C5\u7248\u672C\u7684\u63D2\u4EF6\uFF08v${installed.integrity.version}\uFF09`);
+      else if (installed.integrity?.direction === "upgrade")
+        snackbar(`\u5DF2\u5347\u7EA7\u300C${meta.name}\u300D\u81F3 v${installed.integrity.version}`);
       state.plugins = [...state.plugins.filter((plugin) => plugin.id !== meta.id), meta];
       persisters.plugins();
       publish("plugins");
-      snackbar(`\u5DF2\u5B89\u88C5\u300C${meta.name}\u300D\uFF0C\u53EF\u5728\u5217\u8868\u4E2D\u542F\u7528`);
+      if (meta.permissions?.length && missingPermissions(meta.permissions, meta.grantedPermissions).length)
+        snackbar(`\u5DF2\u5B89\u88C5\u300C${meta.name}\u300D\uFF0C\u542F\u7528\u524D\u8BF7\u5B8C\u6210\u6743\u9650\u6388\u6743`);
+      else snackbar(`\u5DF2\u5B89\u88C5\u300C${meta.name}\u300D\uFF0C\u53EF\u5728\u5217\u8868\u4E2D\u542F\u7528`);
     } catch (error) {
       snackbar(error instanceof Error ? error.message : "\u63D2\u4EF6 ZIP \u65E0\u6CD5\u8BFB\u53D6\u3002");
     }
@@ -3929,6 +4125,8 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
         provider: "netease-api",
         config: { baseUrl: "http://127.0.0.1:3000" },
         capabilities: ["account", "playlists", "search", "playback", "lyrics", "recommendations"],
+        permissions: ["network", "secure-storage"],
+        grantedPermissions: ["network", "secure-storage"],
         description: "\u5185\u7F6E\u7F51\u6613\u4E91\u97F3\u6E90\uFF1A\u626B\u7801\u767B\u5F55\u3001\u641C\u7D22\u64AD\u653E\u3001\u6B4C\u8BCD\u3001\u8D26\u53F7\u6B4C\u5355\u4E0E\u6BCF\u65E5\u63A8\u8350\u3002\u9700\u8981\u8FD0\u884C NeteaseCloudMusicApi \u4EE3\u7406\uFF0C\u670D\u52A1\u5730\u5740\u53EF\u5728\u4E0B\u65B9\u4FEE\u6539\u3002",
         enabled: true,
         status: "",

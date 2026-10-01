@@ -1,5 +1,5 @@
-import type { MusicPlugin, PluginSong, SearchRequest, SearchResponse } from './plugin-contract';
-import type { LyricDocument, PlaybackQuality, PlaybackResource, UnifiedSong } from './models';
+import type { MusicPlugin, PluginSong, SearchRequest, SearchResponse } from './plugin-contract.ts';
+import type { LyricDocument, PlaybackQuality, PlaybackResource, UnifiedSong } from './models.ts';
 
 /**
  * GD Studio Music API (https://music-api.gdstudio.xyz/api.php) engine.

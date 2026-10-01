@@ -6,7 +6,7 @@ import type {
   SourceId,
   UnifiedPlaylist,
   UnifiedSong,
-} from './models';
+} from './models.ts';
 
 export const HOST_API_VERSION = '1';
 
@@ -25,6 +25,36 @@ export const PLUGIN_CAPABILITIES: readonly PluginCapability[] = [
   'recommendations',
 ];
 
+/** Declared runtime permissions a plugin package may request from the user. */
+export type PluginPermission = 'network' | 'secure-storage' | 'notifications' | 'media-library';
+
+export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
+  'network',
+  'secure-storage',
+  'notifications',
+  'media-library',
+];
+
+export const PLUGIN_PERMISSION_LABELS: Readonly<Record<PluginPermission, string>> = {
+  network: '网络访问',
+  'secure-storage': '安全存储',
+  notifications: '桌面通知',
+  'media-library': '媒体库',
+};
+
+export function isPluginPermission(value: unknown): value is PluginPermission {
+  return typeof value === 'string' && (PLUGIN_PERMISSIONS as readonly string[]).includes(value);
+}
+
+export function normalizePermissions(input: unknown): readonly PluginPermission[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<PluginPermission>();
+  for (const item of input) {
+    if (isPluginPermission(item)) seen.add(item);
+  }
+  return [...seen];
+}
+
 export type SearchType = 'song' | 'album' | 'artist' | 'playlist';
 
 export interface PluginManifest {
@@ -36,6 +66,7 @@ export interface PluginManifest {
   readonly provider?: string;
   readonly config?: Readonly<Record<string, unknown>>;
   readonly capabilities: readonly PluginCapability[];
+  readonly permissions?: readonly PluginPermission[];
   readonly description?: string;
   readonly iconDataUri?: string;
 }

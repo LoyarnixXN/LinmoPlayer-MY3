@@ -1,7 +1,7 @@
-import type { PluginPlaylist, MusicPlugin } from './plugin-contract';
-import { toUnifiedPlaylist, toUnifiedSong } from './plugin-contract';
-import type { PluginId, UnifiedPlaylist } from './models';
-import type { PluginRegistry } from './plugin-registry';
+import type { PluginPlaylist, MusicPlugin } from './plugin-contract.ts';
+import { toUnifiedPlaylist, toUnifiedSong } from './plugin-contract.ts';
+import type { PluginId, UnifiedPlaylist } from './models.ts';
+import type { PluginRegistry } from './plugin-registry.ts';
 
 export interface PlaylistRepository {
   save(playlist: UnifiedPlaylist): Promise<void>;
@@ -14,10 +14,13 @@ export interface SyncSummary {
 }
 
 export class PlaylistAggregator {
-  public constructor(
-    private readonly registry: PluginRegistry,
-    private readonly repository: PlaylistRepository,
-  ) {}
+  private readonly registry: PluginRegistry;
+  private readonly repository: PlaylistRepository;
+
+  public constructor(registry: PluginRegistry, repository: PlaylistRepository) {
+    this.registry = registry;
+    this.repository = repository;
+  }
 
   public async syncPlugin(pluginId: PluginId): Promise<SyncSummary> {
     const record = this.registry.get(pluginId);

@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, ipcMain, net, dialog, session, protocol } = require('electron');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const AdmZip = require('adm-zip');
@@ -78,6 +79,47 @@ function windowFromEvent(event) {
 
 function pluginsRoot() {
   return path.join(app.getPath('userData'), 'plugins');
+}
+
+function readIntegrityFile(pluginDirectory) {
+  const target = path.join(pluginDirectory, 'integrity.json');
+  if (!fs.existsSync(target)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(target, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeIntegrityFile(pluginDirectory, record) {
+  fs.writeFileSync(path.join(pluginDirectory, 'integrity.json'), JSON.stringify(record, null, 2));
+}
+
+function copyDirectorySync(source, target) {
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (entry.name === '.previous-version.json') continue;
+    const from = path.join(source, entry.name);
+    const to = path.join(target, entry.name);
+    if (entry.isDirectory()) copyDirectorySync(from, to);
+    else fs.copyFileSync(from, to);
+  }
+}
+
+function compareVersionStrings(a, b) {
+  const pa = String(a)
+    .replace(/^v/i, '')
+    .split('.')
+    .map((n) => Number.parseInt(n, 10) || 0);
+  const pb = String(b)
+    .replace(/^v/i, '')
+    .split('.')
+    .map((n) => Number.parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d > 0 ? 1 : -1;
+  }
+  return 0;
 }
 
 function assertSafeRelativeName(value) {
@@ -159,7 +201,7 @@ ipcMain.handle('library:pick-folder', async (event) => {
 /**
  * Install a declarative plugin ZIP: validate archive safety, persist the
  * package under userData/plugins/<id>/ and extract data files next to it.
- * The renderer performs the contract-level manifest validation via core.
+ * Records sha256 integrity and keeps one previous-version backup for rollback.
  */
 ipcMain.handle('plugin:install', (_event, bytes) => {
   const zip = new AdmZip(Buffer.from(bytes));
@@ -189,8 +231,35 @@ ipcMain.handle('plugin:install', (_event, bytes) => {
 
   const pluginDirectory = path.join(pluginsRoot(), resolved.id);
   fs.mkdirSync(pluginDirectory, { recursive: true });
-  fs.writeFileSync(path.join(pluginDirectory, `${version}.zip`), Buffer.from(bytes));
+  const zipName = `${version}.zip`;
+  const zipPath = path.join(pluginDirectory, zipName);
+  const previousIntegrity = readIntegrityFile(pluginDirectory);
+  fs.writeFileSync(zipPath, Buffer.from(bytes));
+  const checksum = crypto.createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+  writeIntegrityFile(pluginDirectory, {
+    pluginId: resolved.id,
+    version,
+    checksum,
+    algorithm: 'sha256',
+    installedAt: new Date().toISOString(),
+    fileName: zipName,
+  });
   const filesDirectory = path.join(pluginDirectory, 'files');
+  // Keep a single rollback snapshot of the previous extracted tree.
+  if (fs.existsSync(filesDirectory)) {
+    const backupDirectory = path.join(pluginDirectory, 'backup');
+    fs.rmSync(backupDirectory, { recursive: true, force: true });
+    fs.mkdirSync(backupDirectory, { recursive: true });
+    copyDirectorySync(filesDirectory, backupDirectory);
+    if (previousIntegrity)
+      fs.writeFileSync(
+        path.join(backupDirectory, '.previous-version.json'),
+        JSON.stringify({
+          version: previousIntegrity.version,
+          fileName: previousIntegrity.fileName,
+        }),
+      );
+  }
   fs.rmSync(filesDirectory, { recursive: true, force: true });
   fs.mkdirSync(filesDirectory, { recursive: true });
   for (const entry of entries) {
@@ -199,7 +268,76 @@ ipcMain.handle('plugin:install', (_event, bytes) => {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, entry.getData());
   }
-  return { manifest, fileNames: names, filesDirectory };
+  return {
+    manifest,
+    fileNames: names,
+    filesDirectory,
+    integrity: {
+      checksum,
+      version,
+      previousVersion: previousIntegrity?.version ?? null,
+      direction:
+        previousIntegrity && compareVersionStrings(previousIntegrity.version, version) > 0
+          ? 'downgrade'
+          : previousIntegrity
+            ? 'upgrade'
+            : 'install',
+    },
+  };
+});
+
+ipcMain.handle('plugin:verify-integrity', (_event, pluginId) => {
+  const id = String(pluginId ?? '');
+  if (!/^[a-z0-9][a-z0-9._-]{1,63}$/.test(id)) throw new Error('插件 ID 非法。');
+  const pluginDirectory = path.join(pluginsRoot(), id);
+  const record = readIntegrityFile(pluginDirectory);
+  if (!record) return { ok: false, error: '未找到完整性记录。' };
+  const zipPath = path.join(pluginDirectory, record.fileName);
+  if (!fs.existsSync(zipPath)) return { ok: false, error: '插件包文件缺失。' };
+  const actual = crypto.createHash('sha256').update(fs.readFileSync(zipPath)).digest('hex');
+  if (actual !== record.checksum) return { ok: false, error: '完整性校验失败：插件包已被修改。' };
+  return { ok: true, version: record.version, checksum: record.checksum };
+});
+
+ipcMain.handle('plugin:rollback', (_event, pluginId) => {
+  const id = String(pluginId ?? '');
+  if (!/^[a-z0-9][a-z0-9._-]{1,63}$/.test(id)) throw new Error('插件 ID 非法。');
+  const pluginDirectory = path.join(pluginsRoot(), id);
+  const record = readIntegrityFile(pluginDirectory);
+  const backupDirectory = path.join(pluginDirectory, 'backup');
+  if (!fs.existsSync(backupDirectory)) throw new Error('没有可回滚的历史版本。');
+  let previousMeta = null;
+  const metaPath = path.join(backupDirectory, '.previous-version.json');
+  if (fs.existsSync(metaPath)) {
+    try {
+      previousMeta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    } catch {
+      previousMeta = null;
+    }
+  }
+  const filesDirectory = path.join(pluginDirectory, 'files');
+  fs.rmSync(filesDirectory, { recursive: true, force: true });
+  fs.mkdirSync(filesDirectory, { recursive: true });
+  copyDirectorySync(backupDirectory, filesDirectory);
+  fs.rmSync(path.join(filesDirectory, '.previous-version.json'), { force: true });
+  const rolledVersion = previousMeta?.version ?? 'unknown';
+  const rolledFile = previousMeta?.fileName ?? record?.fileName ?? '';
+  const rolledZip =
+    rolledFile && fs.existsSync(path.join(pluginDirectory, rolledFile))
+      ? fs.readFileSync(path.join(pluginDirectory, rolledFile))
+      : null;
+  if (rolledZip) {
+    writeIntegrityFile(pluginDirectory, {
+      pluginId: id,
+      version: rolledVersion,
+      checksum: crypto.createHash('sha256').update(rolledZip).digest('hex'),
+      algorithm: 'sha256',
+      installedAt: new Date().toISOString(),
+      fileName: rolledFile,
+    });
+  }
+  fs.rmSync(backupDirectory, { recursive: true, force: true });
+  return { ok: true, version: rolledVersion };
 });
 
 ipcMain.handle('plugin:read-file', async (_event, input) => {

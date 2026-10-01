@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101014" />
+    <title>Linmo Player</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="top-bar">
+        <div>
+          <p class="eyebrow">LINMO</p>
+          <h1>Linmo Player</h1>
+        </div>
+        <button id="theme-toggle" class="icon-button" type="button" aria-label="切换主题">
+          <span aria-hidden="true">◐</span>
+        </button>
+      </header>
+
+      <main class="page">
+        <section class="hero">
+          <div class="cover-fallback" aria-hidden="true">♪</div>
+          <div class="hero-copy">
+            <h2 id="hero-title">搜索一首歌开始</h2>
+            <p id="hero-artist">复用 packages/core 的声明式音源边界</p>
+            <div class="hero-actions">
+              <button id="search-open" class="filled-button" type="button">搜索歌曲</button>
+              <button id="plugins-open" class="tonal-button" type="button">插件</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3>状态</h3>
+          <ul id="status-list" class="status-list">
+            <li>core 引擎：已加载</li>
+          </ul>
+        </section>
+      </main>
+
+      <footer class="mini-player" id="mini-player" hidden>
+        <div class="mini-meta">
+          <strong id="mini-title">—</strong>
+          <span id="mini-artist">—</span>
+        </div>
+        <audio id="audio" controls preload="none"></audio>
+      </footer>
+    </div>
+    <script src="./dist/app.js"></script>
+  </body>
+</html>

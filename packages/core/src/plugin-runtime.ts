@@ -1,5 +1,5 @@
-import type { MusicPlugin } from './plugin-contract';
-import type { PluginCallResult, PluginRegistry } from './plugin-registry';
+import type { MusicPlugin } from './plugin-contract.ts';
+import type { PluginCallResult, PluginRegistry } from './plugin-registry.ts';
 
 /**
  * Runtime-neutral loader boundary.
@@ -19,10 +19,13 @@ export interface PluginLoadReport {
 }
 
 export class PluginRuntime {
-  public constructor(
-    private readonly loader: PluginModuleLoader,
-    private readonly registry: PluginRegistry,
-  ) {}
+  private readonly loader: PluginModuleLoader;
+  private readonly registry: PluginRegistry;
+
+  public constructor(loader: PluginModuleLoader, registry: PluginRegistry) {
+    this.loader = loader;
+    this.registry = registry;
+  }
 
   public async loadDiscovered(): Promise<readonly PluginLoadReport[]> {
     const moduleIds = await this.loader.discover();

@@ -32,7 +32,7 @@ const DARK_TOKENS = {
 };
 
 const DEFAULT_FONT_STACK =
-  "'MiSans', 'MiSans VF', 'Google Sans', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
+  "'MiSans', 'MiSans VF', 'Inter', 'Google Sans', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
 
 function tokenToCustomProperty(token) {
   return `--m3-${token.replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;

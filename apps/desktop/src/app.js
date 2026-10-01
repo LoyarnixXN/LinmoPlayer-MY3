@@ -1,7 +1,10 @@
 /** App shell: navigation, top bar, account menu, plugin import, boot sequence. */
 
 import './net.js';
-import { validatePluginPackageManifest } from '../../../packages/core/src/index.ts';
+import {
+  validatePluginPackageManifest,
+  missingPermissions,
+} from '../../../packages/core/src/index.ts';
 import { state, subscribe, publish, persisters, installedPlugin } from './state.js';
 import {
   bootPlugins,
@@ -163,11 +166,34 @@ async function importPluginZip(file) {
       throw new Error(`插件缺少主题文件：${manifest.theme.entry}`);
     if (manifest.kind === 'font' && !installed.fileNames.includes(manifest.font.file))
       throw new Error(`插件缺少字体文件：${manifest.font.file}`);
-    const meta = { ...manifest, enabled: false, status: '' };
+    const previous = state.plugins.find((plugin) => plugin.id === manifest.id);
+    const meta = {
+      ...manifest,
+      enabled: false,
+      status: '',
+      grantedPermissions: previous?.grantedPermissions ?? [],
+      ...(installed.integrity
+        ? {
+            integrity: {
+              checksum: installed.integrity.checksum,
+              version: installed.integrity.version,
+            },
+          }
+        : {}),
+    };
+    if (installed.integrity?.direction === 'downgrade')
+      snackbar(`注意：正在安装低于已安装版本的插件（v${installed.integrity.version}）`);
+    else if (installed.integrity?.direction === 'upgrade')
+      snackbar(`已升级「${meta.name}」至 v${installed.integrity.version}`);
     state.plugins = [...state.plugins.filter((plugin) => plugin.id !== meta.id), meta];
     persisters.plugins();
     publish('plugins');
-    snackbar(`已安装「${meta.name}」，可在列表中启用`);
+    if (
+      meta.permissions?.length &&
+      missingPermissions(meta.permissions, meta.grantedPermissions).length
+    )
+      snackbar(`已安装「${meta.name}」，启用前请完成权限授权`);
+    else snackbar(`已安装「${meta.name}」，可在列表中启用`);
   } catch (error) {
     snackbar(error instanceof Error ? error.message : '插件 ZIP 无法读取。');
   }
@@ -291,6 +317,8 @@ function seedBuiltinPlugins() {
       provider: 'netease-api',
       config: { baseUrl: 'http://127.0.0.1:3000' },
       capabilities: ['account', 'playlists', 'search', 'playback', 'lyrics', 'recommendations'],
+      permissions: ['network', 'secure-storage'],
+      grantedPermissions: ['network', 'secure-storage'],
       description:
         '内置网易云音源：扫码登录、搜索播放、歌词、账号歌单与每日推荐。需要运行 NeteaseCloudMusicApi 代理，服务地址可在下方修改。',
       enabled: true,

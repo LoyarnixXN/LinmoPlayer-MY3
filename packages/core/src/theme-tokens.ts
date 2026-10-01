@@ -1,4 +1,4 @@
-import type { ThemeColorOverrides, ThemeColorToken, ThemePayload } from './models';
+import type { ThemeColorOverrides, ThemeColorToken, ThemePayload } from './models.ts';
 
 /** Host default palette (Material 3 baseline). Both hosts start from this. */
 export const DEFAULT_THEME_TOKENS: Readonly<Record<ThemeColorToken, string>> = {

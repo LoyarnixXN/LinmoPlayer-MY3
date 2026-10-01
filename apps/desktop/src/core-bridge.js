@@ -5,6 +5,7 @@ import {
   PluginRegistry,
   SourceAggregator,
   createMusicSourcePlugin,
+  missingPermissions,
 } from '../../../packages/core/src/index.ts';
 import { state, publish, installedPlugin, enabledAccountPlugin, persisters } from './state.js';
 
@@ -29,8 +30,20 @@ function pluginStorage(pluginId) {
   };
 }
 
+function ensurePermissions(meta) {
+  const missing = missingPermissions(meta.permissions, meta.grantedPermissions);
+  if (missing.length) {
+    meta.status = 'error';
+    meta.lastError = `缺少权限授权：${missing.join('、')}。请在插件卡片中授权后重试。`;
+    return { ok: false, error: meta.lastError };
+  }
+  return null;
+}
+
 async function startPlugin(meta) {
   if (meta.kind !== 'music-source') return { ok: true };
+  const denied = ensurePermissions(meta);
+  if (denied) return denied;
   try {
     const plugin = createMusicSourcePlugin(manifestOf(meta));
     const registered = registry.register(plugin);
@@ -52,13 +65,30 @@ async function startPlugin(meta) {
 }
 
 function manifestOf(meta) {
-  const { id, name, version, hostApiVersion, kind, provider, config, capabilities } = meta;
-  return { id, name, version, hostApiVersion, kind, provider, config, capabilities };
+  const { id, name, version, hostApiVersion, kind, provider, config, capabilities, permissions } =
+    meta;
+  return {
+    id,
+    name,
+    version,
+    hostApiVersion,
+    kind,
+    provider,
+    config,
+    capabilities,
+    ...(permissions ? { permissions } : {}),
+  };
 }
 
 export async function enablePlugin(pluginId) {
   const meta = installedPlugin(pluginId);
   if (!meta) return { ok: false, error: '插件不存在。' };
+  const denied = ensurePermissions(meta);
+  if (denied) {
+    persisters.plugins();
+    publish('plugins');
+    return denied;
+  }
   meta.enabled = true;
   const result = await startPlugin(meta);
   persisters.plugins();

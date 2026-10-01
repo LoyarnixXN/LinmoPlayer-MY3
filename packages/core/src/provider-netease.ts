@@ -9,8 +9,8 @@ import type {
   QrLoginTicket,
   SearchRequest,
   SearchResponse,
-} from './plugin-contract';
-import type { LyricDocument, PlaybackQuality, PlaybackResource, UnifiedSong } from './models';
+} from './plugin-contract.ts';
+import type { LyricDocument, PlaybackQuality, PlaybackResource, UnifiedSong } from './models.ts';
 
 /**
  * NeteaseCloudMusicApi proxy engine.

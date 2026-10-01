@@ -1,4 +1,4 @@
-import type { PluginId, UnifiedPlaylist } from './models';
+import type { PluginId, UnifiedPlaylist } from './models.ts';
 
 export interface PlaylistStore {
   save(playlist: UnifiedPlaylist): Promise<void>;

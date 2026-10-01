@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('linmoDesktop', {
     readFile: (pluginId, fileName) =>
       ipcRenderer.invoke('plugin:read-file', { pluginId, fileName }),
     uninstall: (pluginId) => ipcRenderer.invoke('plugin:uninstall', pluginId),
+    verifyIntegrity: (pluginId) => ipcRenderer.invoke('plugin:verify-integrity', pluginId),
+    rollback: (pluginId) => ipcRenderer.invoke('plugin:rollback', pluginId),
   },
   net: { fetch: (input) => ipcRenderer.invoke('net:fetch', input) },
   library: {

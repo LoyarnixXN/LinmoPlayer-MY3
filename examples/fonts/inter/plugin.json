@@ -1,0 +1,14 @@
+{
+  "packageVersion": 1,
+  "id": "font-inter",
+  "name": "Inter",
+  "version": "1.0.0",
+  "hostApiVersion": "1",
+  "kind": "font",
+  "description": "Inter (OFL) — 可变字重的拉丁界面字体，适合作为无衬线 UI 默认字体。",
+  "font": {
+    "family": "Inter",
+    "displayName": "Inter (OFL)",
+    "file": "Inter-latin-400-normal.woff2"
+  }
+}

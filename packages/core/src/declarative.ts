@@ -1,8 +1,8 @@
-import { createGdStudioMusicPlugin, GDSTUDIO_KNOWN_SOURCES } from './provider-gdstudio';
-import { createNeteaseAccountMusicPlugin } from './provider-netease';
-import { normalizeThemePayload } from './theme-tokens';
-import type { PluginPackageFile, PluginPackageManifest } from './plugin-package';
-import type { FontPayload, MusicPlugin, ThemePayload } from './index';
+import { createGdStudioMusicPlugin, GDSTUDIO_KNOWN_SOURCES } from './provider-gdstudio.ts';
+import { createNeteaseAccountMusicPlugin } from './provider-netease.ts';
+import { normalizeThemePayload } from './theme-tokens.ts';
+import type { PluginPackageFile, PluginPackageManifest } from './plugin-package.ts';
+import type { FontPayload, MusicPlugin, ThemePayload } from './index.ts';
 
 /**
  * Declarative plugin factory.
