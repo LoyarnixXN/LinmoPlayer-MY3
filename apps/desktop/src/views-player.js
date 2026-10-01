@@ -27,6 +27,7 @@ export function renderMiniPlayer() {
   const muted = player.audio.muted || player.audio.volume === 0;
   const canPrev = Boolean(song && (player.audio.currentTime > 3 || state.queueIndex > 0));
   const canNext = Boolean(song && state.queueIndex < state.queue.length - 1);
+  const duration = Number.isFinite(player.audio.duration) ? player.audio.duration : 0;
   root.innerHTML = `<input id="mini-progress" class="mini-progress-top" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度" ${song ? '' : 'disabled'} />
     <button type="button" class="mini-info" id="mini-open" aria-label="打开播放页" ${song ? '' : 'disabled'}>
       ${coverMarkup(song, 'small')}
@@ -35,13 +36,17 @@ export function renderMiniPlayer() {
         <small>${song ? `${escapeHtml(song.artist)}${song.album ? ` · ${escapeHtml(song.album)}` : ''}` : '导入或搜索音乐后开始播放'}</small>
       </span>
     </button>
-    <div class="mini-controls">
-      <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== 'sequence' ? 'is-active' : ''}" data-mini-action="mode" aria-label="播放方式：${modeLabel()}" title="播放方式：${modeLabel()}">${icon(modeIcon())}</button>
-      <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="上一首" ${canPrev ? '' : 'disabled'}>${icon('previous')}</button>
-      <button type="button" class="play-button ripple ${state.isPlaying ? 'is-playing' : ''}" data-mini-action="toggle" aria-label="${state.isPlaying ? '暂停' : '播放'}" ${song ? '' : 'disabled'}>${icon(state.isPlaying ? 'pause' : 'play', 'player-icon')}</button>
-      <button type="button" class="player-control ripple" data-mini-action="next" aria-label="下一首" ${canNext ? '' : 'disabled'}>${icon('next')}</button>
+    <div class="mini-transport">
+      <span class="mini-time" id="mini-current">0:00</span>
+      <div class="mini-controls">
+        <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="上一首" ${canPrev ? '' : 'disabled'}>${icon('previous')}</button>
+        <button type="button" class="play-button ripple ${state.isPlaying ? 'is-playing' : ''}" data-mini-action="toggle" aria-label="${state.isPlaying ? '暂停' : '播放'}" ${song ? '' : 'disabled'}>${icon(state.isPlaying ? 'pause' : 'play', 'player-icon')}</button>
+        <button type="button" class="player-control ripple" data-mini-action="next" aria-label="下一首" ${canNext ? '' : 'disabled'}>${icon('next')}</button>
+      </div>
+      <span class="mini-time is-right" id="mini-duration">${duration ? formatTime(duration) : '0:00'}</span>
     </div>
     <div class="mini-extra">
+      <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== 'sequence' ? 'is-active' : ''}" data-mini-action="mode" aria-label="播放方式：${modeLabel()}" title="播放方式：${modeLabel()}">${icon(modeIcon())}</button>
       <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? '取消静音' : '静音'}">${icon(muted ? 'volumeMute' : 'volume')}</button>
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="音量" />
     </div>`;
@@ -230,9 +235,21 @@ export function updateProgressUI() {
   const mini = qs('#mini-progress');
   if (mini && !miniDragging && document.activeElement !== mini)
     mini.value = String(Math.round(fraction * 1000));
+  const miniCurrent = qs('#mini-current');
+  const miniDuration = qs('#mini-duration');
+  if (miniCurrent) miniCurrent.textContent = formatTime(audio.currentTime);
+  if (miniDuration)
+    miniDuration.textContent = Number.isFinite(audio.duration)
+      ? formatTime(audio.duration)
+      : '0:00';
   const np = qs('#np-progress');
   if (np && !npDragging && document.activeElement !== np)
     np.value = String(Math.round(fraction * 1000));
+  const npCurrent = qs('#np-current');
+  const npDuration = qs('#np-duration');
+  if (npCurrent) npCurrent.textContent = formatTime(audio.currentTime);
+  if (npDuration)
+    npDuration.textContent = Number.isFinite(audio.duration) ? formatTime(audio.duration) : '0:00';
 }
 
 function updateLyricsHighlight() {

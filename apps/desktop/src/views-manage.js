@@ -239,6 +239,8 @@ export function renderSettings() {
         <label class="m3-switch"><input type="checkbox" data-setting-toggle="autoplayNext" ${settings.autoplayNext ? 'checked' : ''}/><span class="track"><span class="thumb"></span></span></label></div>
       <div class="settings-option"><span><strong>后台播放</strong><p>窗口失焦时继续播放。</p></span>
         <label class="m3-switch"><input type="checkbox" data-setting-toggle="backgroundPlayback" ${settings.backgroundPlayback ? 'checked' : ''}/><span class="track"><span class="thumb"></span></span></label></div>
+      <div class="settings-option"><span><strong>切歌桌面通知</strong><p>播放新歌曲时显示系统通知。</p></span>
+        <label class="m3-switch"><input type="checkbox" data-setting-toggle="notifyOnTrackChange" ${settings.notifyOnTrackChange ? 'checked' : ''}/><span class="track"><span class="thumb"></span></span></label></div>
     </section>
     <section class="settings-group">
       <h4>${icon('file', 'row-icon')}数据</h4>
@@ -281,6 +283,9 @@ export function renderSettings() {
   root.querySelectorAll('[data-setting-toggle]').forEach((input) =>
     input.addEventListener('change', () => {
       patchSettings({ [input.dataset.settingToggle]: input.checked });
+      if (input.dataset.settingToggle === 'notifyOnTrackChange' && input.checked) {
+        void import('./player.js').then((module) => module.requestNotificationPermission());
+      }
     }),
   );
   qs('#setting-clear-library', root)?.addEventListener('click', async () => {

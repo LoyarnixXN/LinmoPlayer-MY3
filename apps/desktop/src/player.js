@@ -1,7 +1,14 @@
 /** Playback orchestration: queue, modes, resolve pipeline, lyrics priming. */
 
-import { state, patchSettings, publish, persisters, PLAYBACK_MODES } from './state.js';
-import { resolvePlayback, fetchLyrics, localMediaUrl } from './core-bridge.js';
+import {
+  state,
+  patchSettings,
+  publish,
+  persisters,
+  playbackMemory,
+  PLAYBACK_MODES,
+} from './state.js';
+import { resolvePlayback, fetchLyrics, localMediaUrl, fetchCover } from './core-bridge.js';
 import { parseLrc, isLrc } from './lrc.js';
 import { snackbar } from './ui.js';
 
@@ -11,6 +18,9 @@ audio.volume = clampVolume(state.settings.volume);
 audio.muted = Boolean(state.settings.muted);
 let lastVolume = audio.volume > 0 ? audio.volume : 0.8;
 let resolveToken = 0;
+let lastMemorySaveAt = 0;
+let pendingSeekSeconds = 0;
+let lastNotifiedKey = '';
 const lyricsCache = new Map();
 
 function clampVolume(value) {
@@ -32,8 +42,156 @@ function setSong(song, queue = state.queue, index = -1) {
   state.queue = queue;
   state.queueIndex = index;
   state.resolvedVia = null;
+  pendingSeekSeconds = 0;
   publish('player');
   void primeLyrics(song);
+  void updateMediaSession(song);
+}
+
+function savedPositionSeconds(songKey) {
+  const entry = playbackMemory[songKey];
+  if (!entry || !Number.isFinite(entry.positionMs)) return 0;
+  return Math.max(0, entry.positionMs / 1000);
+}
+
+function rememberPlayback(force = false) {
+  const song = state.currentSong;
+  if (!song?.key) return;
+  const now = Date.now();
+  if (!force && now - lastMemorySaveAt < 5000) return;
+  lastMemorySaveAt = now;
+  const duration = audio.duration;
+  const position = audio.currentTime;
+  if (!Number.isFinite(position)) return;
+  // Near the end: treat as finished, do not resume into the outro.
+  if (Number.isFinite(duration) && duration > 0 && position >= duration - 2) {
+    delete playbackMemory[song.key];
+  } else {
+    playbackMemory[song.key] = {
+      positionMs: Math.round(position * 1000),
+      durationMs: Number.isFinite(duration) ? Math.round(duration * 1000) : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  persisters.playbackMemory();
+}
+
+function applyPendingSeek() {
+  if (pendingSeekSeconds <= 0) return;
+  const duration = audio.duration;
+  if (!Number.isFinite(duration) || duration <= 0) return;
+  const target = Math.min(pendingSeekSeconds, Math.max(0, duration - 1));
+  if (target > 1) {
+    try {
+      audio.currentTime = target;
+    } catch {
+      /* metadata not ready yet */
+    }
+  }
+  pendingSeekSeconds = 0;
+}
+
+async function notifyTrackChange(song) {
+  if (!state.settings.notifyOnTrackChange) return;
+  if (!song || lastNotifiedKey === song.key) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  lastNotifiedKey = song.key;
+  let iconUrl = '';
+  if (song.coverUrl) iconUrl = song.coverUrl;
+  else {
+    const resolved = await fetchCover(song);
+    if (resolved) iconUrl = resolved;
+  }
+  try {
+    new Notification(song.title, {
+      body: song.artist + (song.album ? ` · ${song.album}` : ''),
+      ...(iconUrl ? { icon: iconUrl } : {}),
+      silent: true,
+    });
+  } catch {
+    /* notification unsupported or blocked */
+  }
+}
+
+async function updateMediaSession(song) {
+  if (!('mediaSession' in navigator)) return;
+  if (!song) {
+    navigator.mediaSession.metadata = null;
+    return;
+  }
+  let artwork = [];
+  const coverUrl = song.coverUrl ?? (await fetchCover(song));
+  if (coverUrl) {
+    artwork = [
+      { src: coverUrl, sizes: '512x512', type: 'image/jpeg' },
+      { src: coverUrl, sizes: '256x256', type: 'image/jpeg' },
+    ];
+  }
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: song.title,
+      artist: song.artist,
+      ...(song.album ? { album: song.album } : {}),
+      ...(artwork.length ? { artwork } : {}),
+    });
+  } catch {
+    /* MediaMetadata unsupported */
+  }
+}
+
+function bindMediaSessionHandlers() {
+  if (!('mediaSession' in navigator)) return;
+  const set = (action, handler) => {
+    try {
+      navigator.mediaSession.setActionHandler(action, handler);
+    } catch {
+      /* action not supported */
+    }
+  };
+  set('play', () => void audio.play().catch(() => undefined));
+  set('pause', () => audio.pause());
+  set('previoustrack', () => player.previous());
+  set('nexttrack', () => player.next());
+  set('seekto', (details) => {
+    if (typeof details.seekTime === 'number' && Number.isFinite(details.seekTime))
+      audio.currentTime = Math.max(0, details.seekTime);
+  });
+  set('seekbackward', (details) => {
+    const offset = details?.seekOffset ?? 10;
+    audio.currentTime = Math.max(0, audio.currentTime - offset);
+  });
+  set('seekforward', (details) => {
+    const offset = details?.seekOffset ?? 10;
+    const duration = audio.duration;
+    const next = audio.currentTime + offset;
+    audio.currentTime = Number.isFinite(duration) ? Math.min(duration, next) : next;
+  });
+}
+
+function syncMediaSessionPosition() {
+  if (
+    !('mediaSession' in navigator) ||
+    typeof navigator.mediaSession.setPositionState !== 'function'
+  )
+    return;
+  const duration = audio.duration;
+  if (!Number.isFinite(duration) || duration <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration,
+      playbackRate: audio.playbackRate || 1,
+      position: Math.min(audio.currentTime, duration),
+    });
+  } catch {
+    /* invalid position state */
+  }
+}
+
+export function requestNotificationPermission() {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') {
+    void Notification.requestPermission().catch(() => undefined);
+  }
 }
 
 export function registerRecent(song) {
@@ -102,7 +260,17 @@ async function playResolved(song, index) {
         }
       : null;
     audio.src = resolved.url;
-    audio.currentTime = 0;
+    pendingSeekSeconds = savedPositionSeconds(song.key);
+    if (pendingSeekSeconds > 0) {
+      const resumeAt = pendingSeekSeconds;
+      audio.addEventListener(
+        'loadedmetadata',
+        () => {
+          if (token === resolveToken && pendingSeekSeconds === resumeAt) applyPendingSeek();
+        },
+        { once: true },
+      );
+    }
     await audio.play();
     if (resolved.fallbackUsed) {
       const viaName = state.resolvedVia?.source
@@ -111,6 +279,7 @@ async function playResolved(song, index) {
       snackbar(`原音源不可用，已从 ${viaName} 补全播放`);
     }
     registerRecent(song);
+    void notifyTrackChange(song);
   } catch (error) {
     if (token !== resolveToken) return;
     audio.removeAttribute('src');
@@ -132,9 +301,21 @@ export const player = {
     if (song.mediaUri) {
       setStatus('loading');
       audio.src = localMediaUrl(song);
-      audio.currentTime = 0;
+      pendingSeekSeconds = savedPositionSeconds(song.key);
+      const resumeAt = pendingSeekSeconds;
+      if (resumeAt > 0) {
+        audio.addEventListener(
+          'loadedmetadata',
+          () => {
+            if (state.currentSong?.key === song.key && pendingSeekSeconds === resumeAt)
+              applyPendingSeek();
+          },
+          { once: true },
+        );
+      }
       audio.play().catch(() => setStatus('error', '无法播放本地文件。'));
       registerRecent(song);
+      void notifyTrackChange(song);
     } else {
       void playResolved(song, index);
     }
@@ -234,14 +415,21 @@ audio.addEventListener('play', () => {
 });
 audio.addEventListener('pause', () => {
   state.isPlaying = false;
+  rememberPlayback(true);
   publish('player');
 });
 audio.addEventListener('playing', () => setStatus('playing'));
 audio.addEventListener('pause', () => {
   if (state.playerStatus === 'playing' || state.playerStatus === 'loading') setStatus('paused');
 });
-audio.addEventListener('timeupdate', () => publish('player-time'));
+audio.addEventListener('timeupdate', () => {
+  rememberPlayback(false);
+  syncMediaSessionPosition();
+  publish('player-time');
+});
 audio.addEventListener('loadedmetadata', () => {
+  applyPendingSeek();
+  syncMediaSessionPosition();
   if (state.currentSong && !state.currentSong.durationMs) {
     state.queue[state.queueIndex] = {
       ...state.currentSong,
@@ -252,9 +440,12 @@ audio.addEventListener('loadedmetadata', () => {
   publish('player-time');
 });
 audio.addEventListener('ended', () => {
+  rememberPlayback(true);
   const mode = state.settings.playbackMode;
   if (mode === 'repeat-one') {
     audio.currentTime = 0;
+    delete playbackMemory[state.currentSong?.key ?? ''];
+    persisters.playbackMemory();
     void audio.play().catch(() => undefined);
     return;
   }
@@ -277,3 +468,6 @@ audio.addEventListener('error', () => {
 window.addEventListener('blur', () => {
   if (!state.settings.backgroundPlayback && state.isPlaying) audio.pause();
 });
+window.addEventListener('beforeunload', () => rememberPlayback(true));
+
+bindMediaSessionHandlers();

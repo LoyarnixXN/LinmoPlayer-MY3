@@ -83,12 +83,16 @@ export const state = {
       volume: 0.8,
       muted: false,
       onboardingDone: false,
+      notifyOnTrackChange: true,
     },
     load('preferences', {}),
   ),
 };
 if (!PLAYBACK_MODES.includes(state.settings.playbackMode)) state.settings.playbackMode = 'sequence';
 if (!QUALITIES.some(([id]) => id === state.settings.quality)) state.settings.quality = 'higher';
+
+/** Last playback position per song key, for resume-on-replay. */
+export const playbackMemory = load('playback-memory', {});
 
 export const persisters = {
   library: () => save('library', state.songs),
@@ -97,6 +101,7 @@ export const persisters = {
   recents: () => save('recents', state.recents.slice(0, 30)),
   plugins: () => save('plugins', state.plugins),
   preferences: () => save('preferences', state.settings),
+  playbackMemory: () => save('playback-memory', playbackMemory),
 };
 
 export function patchSettings(patch) {

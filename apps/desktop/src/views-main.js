@@ -451,7 +451,7 @@ function renderPlaylistsTab() {
       ) => `<div class="playlist-card ripple" role="button" tabindex="0" data-playlist-open="remote:${escapeHtml(playlist.key)}">
         ${
           playlist.coverUrl
-            ? `<span class="playlist-cover playlist-cover-image"><img src="${escapeHtml(playlist.coverUrl)}" alt="" loading="lazy" onerror="this.remove()"/></span>`
+            ? `<span class="playlist-cover playlist-cover-image"><img src="${escapeHtml(playlist.coverUrl)}" alt="" loading="lazy"/></span>`
             : `<span class="playlist-cover">${icon('music')}</span>`
         }
         <span class="playlist-copy"><strong>${escapeHtml(playlist.title)}</strong><span>${playlist.count ?? playlist.songs.length ?? 0} 首 · ${escapeHtml(sourceName(playlist.pluginId))}</span></span>

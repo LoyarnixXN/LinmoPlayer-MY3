@@ -89,7 +89,6 @@ function loginDialogBody() {
       <label class="field"><span>密码</span>
         <input type="password" id="login-password" placeholder="密码" autocomplete="current-password" /></label>
       <button type="button" class="filled-button" id="login-submit">${icon('login', 'button-icon')}登录</button>
-      
     </div>`;
 }
 

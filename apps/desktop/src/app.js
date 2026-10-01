@@ -11,13 +11,13 @@ import {
   fetchRecommendations,
 } from './core-bridge.js';
 import { applyAppearance, setMode } from './theme.js';
-import { player } from './player.js';
+import { player, requestNotificationPermission } from './player.js';
 import { renderHome, renderSearch, renderLibrary, runSearch } from './views-main.js';
 import { renderPlugins, renderSettings } from './views-manage.js';
 import { initPlayerView, renderMiniPlayer } from './views-player.js';
 import { initOnboarding } from './onboarding.js';
 import { loginDialog, createPlaylistDialog, renamePlaylistDialog } from './dialogs.js';
-import { installRipple, qs, qsa, snackbar, escapeHtml } from './ui.js';
+import { installRipple, qs, qsa, snackbar, escapeHtml, installImageErrorFallback } from './ui.js';
 import { icon } from './icons.js';
 
 const PAGE_TITLES = {
@@ -76,7 +76,7 @@ function renderAccount() {
   if (!avatar) return;
   const account = state.account;
   avatar.innerHTML = account?.avatarUrl
-    ? `<img src="${escapeHtml(account.avatarUrl)}" alt="" onerror="this.remove()"/>`
+    ? `<img src="${escapeHtml(account.avatarUrl)}" alt=""/>`
     : icon('person');
   avatar.classList.toggle('has-account', Boolean(account));
   const menu = qs('#account-menu');
@@ -98,7 +98,7 @@ function fillAccountMenu() {
       ? '登录后同步账号内容'
       : '启用账号类插件后可登录';
   menu.innerHTML = `<div class="account-header">
-      <span class="account-avatar-large">${account?.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt="" onerror="this.remove()"/>` : icon('person')}</span>
+      <span class="account-avatar-large">${account?.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt=""/>` : icon('person')}</span>
       <span><strong>${account ? escapeHtml(account.name) : '未登录'}</strong>
       <small>${subtitle}</small></span>
     </div>
@@ -175,19 +175,32 @@ async function importPluginZip(file) {
 
 /* ---------------- window controls ---------------- */
 
-function updateMaximizeIcon() {
-  const button = qs('#window-maximize');
+function updateMaximizeIcon(maximized) {
+  const next =
+    typeof maximized === 'boolean'
+      ? maximized
+      : window.outerWidth >= window.screen.availWidth - 8 &&
+        window.outerHeight >= window.screen.availHeight - 8;
+  for (const id of ['#window-maximize', '#np-maximize']) {
+    const button = qs(id);
+    if (!button) continue;
+    button.innerHTML = icon(next ? 'restore' : 'maximize');
+    button.setAttribute('aria-label', next ? '还原' : '最大化');
+  }
+}
+
+function updateThemeToggleIcon() {
+  const button = qs('#theme-toggle');
   if (!button) return;
-  const maximized =
-    window.outerWidth >= window.screen.availWidth - 8 &&
-    window.outerHeight >= window.screen.availHeight - 8;
-  button.innerHTML = icon(maximized ? 'restore' : 'maximize');
-  button.setAttribute('aria-label', maximized ? '还原' : '最大化');
+  const dark = state.settings.mode === 'dark';
+  button.innerHTML = icon(dark ? 'sun' : 'moon');
+  button.setAttribute('aria-label', dark ? '切换到浅色模式' : '切换到深色模式');
 }
 
 /* ---------------- boot ---------------- */
 
 function bindShell() {
+  installImageErrorFallback();
   qsa('[data-icon]').forEach((element) => {
     element.innerHTML = icon(element.dataset.icon || 'music');
   });
@@ -205,8 +218,11 @@ function bindShell() {
     window.linmoDesktop?.window?.toggleMaximize(),
   );
   qs('#np-close-window')?.addEventListener('click', () => window.linmoDesktop?.window?.close());
-  window.addEventListener('resize', updateMaximizeIcon);
+  window.linmoDesktop?.window?.onMaximized?.(updateMaximizeIcon);
+  window.addEventListener('resize', () => updateMaximizeIcon());
   updateMaximizeIcon();
+  updateThemeToggleIcon();
+  subscribe('theme', updateThemeToggleIcon);
 
   qs('#account-avatar')?.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -312,6 +328,7 @@ async function boot() {
   await bootPlugins();
   await refreshAccount();
   if (state.account) void fetchRecommendations();
+  if (state.settings.notifyOnTrackChange) requestNotificationPermission();
   initOnboarding();
 }
 

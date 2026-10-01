@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('linmoDesktop', {
     minimize: () => ipcRenderer.send('window:minimize'),
     toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
     close: () => ipcRenderer.send('window:close'),
+    onMaximized: (handler) => {
+      const listener = (_event, maximized) => handler(Boolean(maximized));
+      ipcRenderer.on('window:maximized', listener);
+      return () => ipcRenderer.removeListener('window:maximized', listener);
+    },
   },
   plugins: {
     install: (bytes) => ipcRenderer.invoke('plugin:install', bytes),

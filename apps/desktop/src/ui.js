@@ -32,8 +32,20 @@ export function coverMarkup(song, size = '') {
   if (url)
     return `<span class="${classes} cover-image"><span class="cover-glyph">${glyph}</span><img src="${escapeHtml(
       url,
-    )}" alt="" loading="lazy" onerror="this.remove()"/></span>`;
+    )}" alt="" loading="lazy"/></span>`;
   return `<span class="${classes} cover-fallback">${glyph}</span>`;
+}
+
+/** Remove broken <img> nodes (CSP blocks inline onerror handlers). */
+export function installImageErrorFallback() {
+  document.addEventListener(
+    'error',
+    (event) => {
+      const target = event.target;
+      if (target instanceof HTMLImageElement) target.remove();
+    },
+    true,
+  );
 }
 
 /** Material ripple: attach to any element with the .ripple class via delegation. */

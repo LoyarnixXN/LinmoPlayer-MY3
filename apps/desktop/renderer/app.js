@@ -1111,7 +1111,7 @@
       (plugin) => plugin.enabled && plugin.kind === "music-source" && plugin.capabilities.includes("account")
     ) ?? null;
   }
-  var PREFIX, listeners, PLAYBACK_MODES, QUALITIES, state, persisters;
+  var PREFIX, listeners, PLAYBACK_MODES, QUALITIES, state, playbackMemory, persisters;
   var init_state = __esm({
     "src/state.js"() {
       PREFIX = "linmo.";
@@ -1164,20 +1164,23 @@
             playbackMode: "sequence",
             volume: 0.8,
             muted: false,
-            onboardingDone: false
+            onboardingDone: false,
+            notifyOnTrackChange: true
           },
           load("preferences", {})
         )
       };
       if (!PLAYBACK_MODES.includes(state.settings.playbackMode)) state.settings.playbackMode = "sequence";
       if (!QUALITIES.some(([id]) => id === state.settings.quality)) state.settings.quality = "higher";
+      playbackMemory = load("playback-memory", {});
       persisters = {
         library: () => save("library", state.songs),
         playlists: () => save("playlists", state.playlists),
         remotePlaylists: () => save("remote-playlists", state.remotePlaylists),
         recents: () => save("recents", state.recents.slice(0, 30)),
         plugins: () => save("plugins", state.plugins),
-        preferences: () => save("preferences", state.settings)
+        preferences: () => save("preferences", state.settings),
+        playbackMemory: () => save("playback-memory", playbackMemory)
       };
     }
   });
@@ -1557,6 +1560,7 @@
     coverMarkup: () => coverMarkup,
     escapeHtml: () => escapeHtml,
     formatTime: () => formatTime,
+    installImageErrorFallback: () => installImageErrorFallback,
     installRipple: () => installRipple,
     openDialog: () => openDialog,
     qs: () => qs,
@@ -1589,8 +1593,18 @@
     if (url)
       return `<span class="${classes} cover-image"><span class="cover-glyph">${glyph}</span><img src="${escapeHtml(
         url
-      )}" alt="" loading="lazy" onerror="this.remove()"/></span>`;
+      )}" alt="" loading="lazy"/></span>`;
     return `<span class="${classes} cover-fallback">${glyph}</span>`;
+  }
+  function installImageErrorFallback() {
+    document.addEventListener(
+      "error",
+      (event) => {
+        const target = event.target;
+        if (target instanceof HTMLImageElement) target.remove();
+      },
+      true
+    );
   }
   function installRipple() {
     document.addEventListener("pointerdown", (event) => {
@@ -1817,7 +1831,7 @@
         error: "#F2B8B5",
         scrim: "#000000"
       };
-      DEFAULT_FONT_STACK = "'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
+      DEFAULT_FONT_STACK = "'MiSans', 'MiSans VF', 'Google Sans', 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif";
       installedThemePlugins = () => state.plugins.filter((plugin) => plugin.kind === "theme");
       installedFontPlugins = () => state.plugins.filter((plugin) => plugin.kind === "font");
     }
@@ -1866,6 +1880,12 @@
   });
 
   // src/player.js
+  var player_exports = {};
+  __export(player_exports, {
+    player: () => player,
+    registerRecent: () => registerRecent,
+    requestNotificationPermission: () => requestNotificationPermission
+  });
   function clampVolume(value) {
     return Math.max(0, Math.min(1, Number(value) || 0));
   }
@@ -1882,8 +1902,139 @@
     state.queue = queue;
     state.queueIndex = index;
     state.resolvedVia = null;
+    pendingSeekSeconds = 0;
     publish("player");
     void primeLyrics(song);
+    void updateMediaSession(song);
+  }
+  function savedPositionSeconds(songKey) {
+    const entry = playbackMemory[songKey];
+    if (!entry || !Number.isFinite(entry.positionMs)) return 0;
+    return Math.max(0, entry.positionMs / 1e3);
+  }
+  function rememberPlayback(force = false) {
+    const song = state.currentSong;
+    if (!song?.key) return;
+    const now = Date.now();
+    if (!force && now - lastMemorySaveAt < 5e3) return;
+    lastMemorySaveAt = now;
+    const duration = audio.duration;
+    const position = audio.currentTime;
+    if (!Number.isFinite(position)) return;
+    if (Number.isFinite(duration) && duration > 0 && position >= duration - 2) {
+      delete playbackMemory[song.key];
+    } else {
+      playbackMemory[song.key] = {
+        positionMs: Math.round(position * 1e3),
+        durationMs: Number.isFinite(duration) ? Math.round(duration * 1e3) : void 0,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    persisters.playbackMemory();
+  }
+  function applyPendingSeek() {
+    if (pendingSeekSeconds <= 0) return;
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const target = Math.min(pendingSeekSeconds, Math.max(0, duration - 1));
+    if (target > 1) {
+      try {
+        audio.currentTime = target;
+      } catch {
+      }
+    }
+    pendingSeekSeconds = 0;
+  }
+  async function notifyTrackChange(song) {
+    if (!state.settings.notifyOnTrackChange) return;
+    if (!song || lastNotifiedKey === song.key) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    lastNotifiedKey = song.key;
+    let iconUrl = "";
+    if (song.coverUrl) iconUrl = song.coverUrl;
+    else {
+      const resolved = await fetchCover(song);
+      if (resolved) iconUrl = resolved;
+    }
+    try {
+      new Notification(song.title, {
+        body: song.artist + (song.album ? ` \xB7 ${song.album}` : ""),
+        ...iconUrl ? { icon: iconUrl } : {},
+        silent: true
+      });
+    } catch {
+    }
+  }
+  async function updateMediaSession(song) {
+    if (!("mediaSession" in navigator)) return;
+    if (!song) {
+      navigator.mediaSession.metadata = null;
+      return;
+    }
+    let artwork = [];
+    const coverUrl = song.coverUrl ?? await fetchCover(song);
+    if (coverUrl) {
+      artwork = [
+        { src: coverUrl, sizes: "512x512", type: "image/jpeg" },
+        { src: coverUrl, sizes: "256x256", type: "image/jpeg" }
+      ];
+    }
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: song.title,
+        artist: song.artist,
+        ...song.album ? { album: song.album } : {},
+        ...artwork.length ? { artwork } : {}
+      });
+    } catch {
+    }
+  }
+  function bindMediaSessionHandlers() {
+    if (!("mediaSession" in navigator)) return;
+    const set = (action, handler) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+      }
+    };
+    set("play", () => void audio.play().catch(() => void 0));
+    set("pause", () => audio.pause());
+    set("previoustrack", () => player.previous());
+    set("nexttrack", () => player.next());
+    set("seekto", (details) => {
+      if (typeof details.seekTime === "number" && Number.isFinite(details.seekTime))
+        audio.currentTime = Math.max(0, details.seekTime);
+    });
+    set("seekbackward", (details) => {
+      const offset = details?.seekOffset ?? 10;
+      audio.currentTime = Math.max(0, audio.currentTime - offset);
+    });
+    set("seekforward", (details) => {
+      const offset = details?.seekOffset ?? 10;
+      const duration = audio.duration;
+      const next = audio.currentTime + offset;
+      audio.currentTime = Number.isFinite(duration) ? Math.min(duration, next) : next;
+    });
+  }
+  function syncMediaSessionPosition() {
+    if (!("mediaSession" in navigator) || typeof navigator.mediaSession.setPositionState !== "function")
+      return;
+    const duration = audio.duration;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: audio.playbackRate || 1,
+        position: Math.min(audio.currentTime, duration)
+      });
+    } catch {
+    }
+  }
+  function requestNotificationPermission() {
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "default") {
+      void Notification.requestPermission().catch(() => void 0);
+    }
   }
   function registerRecent(song) {
     if (!song) return;
@@ -1947,13 +2098,24 @@
         fallbackUsed: Boolean(resolved.fallbackUsed)
       } : null;
       audio.src = resolved.url;
-      audio.currentTime = 0;
+      pendingSeekSeconds = savedPositionSeconds(song.key);
+      if (pendingSeekSeconds > 0) {
+        const resumeAt = pendingSeekSeconds;
+        audio.addEventListener(
+          "loadedmetadata",
+          () => {
+            if (token === resolveToken && pendingSeekSeconds === resumeAt) applyPendingSeek();
+          },
+          { once: true }
+        );
+      }
       await audio.play();
       if (resolved.fallbackUsed) {
         const viaName = state.resolvedVia?.source ? `${state.resolvedVia.pluginId} \xB7 ${state.resolvedVia.source}` : state.resolvedVia?.pluginId;
         snackbar(`\u539F\u97F3\u6E90\u4E0D\u53EF\u7528\uFF0C\u5DF2\u4ECE ${viaName} \u8865\u5168\u64AD\u653E`);
       }
       registerRecent(song);
+      void notifyTrackChange(song);
     } catch (error) {
       if (token !== resolveToken) return;
       audio.removeAttribute("src");
@@ -1961,7 +2123,7 @@
       snackbar(state.playerError ?? "\u64AD\u653E\u5931\u8D25");
     }
   }
-  var audio, lastVolume, resolveToken, lyricsCache, player;
+  var audio, lastVolume, resolveToken, lastMemorySaveAt, pendingSeekSeconds, lastNotifiedKey, lyricsCache, player;
   var init_player = __esm({
     "src/player.js"() {
       init_state();
@@ -1974,6 +2136,9 @@
       audio.muted = Boolean(state.settings.muted);
       lastVolume = audio.volume > 0 ? audio.volume : 0.8;
       resolveToken = 0;
+      lastMemorySaveAt = 0;
+      pendingSeekSeconds = 0;
+      lastNotifiedKey = "";
       lyricsCache = /* @__PURE__ */ new Map();
       player = {
         audio,
@@ -1986,9 +2151,21 @@
           if (song.mediaUri) {
             setStatus("loading");
             audio.src = localMediaUrl(song);
-            audio.currentTime = 0;
+            pendingSeekSeconds = savedPositionSeconds(song.key);
+            const resumeAt = pendingSeekSeconds;
+            if (resumeAt > 0) {
+              audio.addEventListener(
+                "loadedmetadata",
+                () => {
+                  if (state.currentSong?.key === song.key && pendingSeekSeconds === resumeAt)
+                    applyPendingSeek();
+                },
+                { once: true }
+              );
+            }
             audio.play().catch(() => setStatus("error", "\u65E0\u6CD5\u64AD\u653E\u672C\u5730\u6587\u4EF6\u3002"));
             registerRecent(song);
+            void notifyTrackChange(song);
           } else {
             void playResolved(song, index);
           }
@@ -2076,14 +2253,21 @@
       });
       audio.addEventListener("pause", () => {
         state.isPlaying = false;
+        rememberPlayback(true);
         publish("player");
       });
       audio.addEventListener("playing", () => setStatus("playing"));
       audio.addEventListener("pause", () => {
         if (state.playerStatus === "playing" || state.playerStatus === "loading") setStatus("paused");
       });
-      audio.addEventListener("timeupdate", () => publish("player-time"));
+      audio.addEventListener("timeupdate", () => {
+        rememberPlayback(false);
+        syncMediaSessionPosition();
+        publish("player-time");
+      });
       audio.addEventListener("loadedmetadata", () => {
+        applyPendingSeek();
+        syncMediaSessionPosition();
         if (state.currentSong && !state.currentSong.durationMs) {
           state.queue[state.queueIndex] = {
             ...state.currentSong,
@@ -2094,9 +2278,12 @@
         publish("player-time");
       });
       audio.addEventListener("ended", () => {
+        rememberPlayback(true);
         const mode = state.settings.playbackMode;
         if (mode === "repeat-one") {
           audio.currentTime = 0;
+          delete playbackMemory[state.currentSong?.key ?? ""];
+          persisters.playbackMemory();
           void audio.play().catch(() => void 0);
           return;
         }
@@ -2119,6 +2306,8 @@
       window.addEventListener("blur", () => {
         if (!state.settings.backgroundPlayback && state.isPlaying) audio.pause();
       });
+      window.addEventListener("beforeunload", () => rememberPlayback(true));
+      bindMediaSessionHandlers();
     }
   });
 
@@ -2202,7 +2391,6 @@
       <label class="field"><span>\u5BC6\u7801</span>
         <input type="password" id="login-password" placeholder="\u5BC6\u7801" autocomplete="current-password" /></label>
       <button type="button" class="filled-button" id="login-submit">${icon("login", "button-icon")}\u767B\u5F55</button>
-      
     </div>`;
   }
   function switchLoginTab(layer, tab) {
@@ -2696,7 +2884,7 @@
     ).join("");
     const remoteCards = state.remotePlaylists.map(
       (playlist) => `<div class="playlist-card ripple" role="button" tabindex="0" data-playlist-open="remote:${escapeHtml(playlist.key)}">
-        ${playlist.coverUrl ? `<span class="playlist-cover playlist-cover-image"><img src="${escapeHtml(playlist.coverUrl)}" alt="" loading="lazy" onerror="this.remove()"/></span>` : `<span class="playlist-cover">${icon("music")}</span>`}
+        ${playlist.coverUrl ? `<span class="playlist-cover playlist-cover-image"><img src="${escapeHtml(playlist.coverUrl)}" alt="" loading="lazy"/></span>` : `<span class="playlist-cover">${icon("music")}</span>`}
         <span class="playlist-copy"><strong>${escapeHtml(playlist.title)}</strong><span>${playlist.count ?? playlist.songs.length ?? 0} \u9996 \xB7 ${escapeHtml(sourceName(playlist.pluginId))}</span></span>
       </div>`
     ).join("");
@@ -3137,6 +3325,8 @@
         <label class="m3-switch"><input type="checkbox" data-setting-toggle="autoplayNext" ${settings.autoplayNext ? "checked" : ""}/><span class="track"><span class="thumb"></span></span></label></div>
       <div class="settings-option"><span><strong>\u540E\u53F0\u64AD\u653E</strong><p>\u7A97\u53E3\u5931\u7126\u65F6\u7EE7\u7EED\u64AD\u653E\u3002</p></span>
         <label class="m3-switch"><input type="checkbox" data-setting-toggle="backgroundPlayback" ${settings.backgroundPlayback ? "checked" : ""}/><span class="track"><span class="thumb"></span></span></label></div>
+      <div class="settings-option"><span><strong>\u5207\u6B4C\u684C\u9762\u901A\u77E5</strong><p>\u64AD\u653E\u65B0\u6B4C\u66F2\u65F6\u663E\u793A\u7CFB\u7EDF\u901A\u77E5\u3002</p></span>
+        <label class="m3-switch"><input type="checkbox" data-setting-toggle="notifyOnTrackChange" ${settings.notifyOnTrackChange ? "checked" : ""}/><span class="track"><span class="thumb"></span></span></label></div>
     </section>
     <section class="settings-group">
       <h4>${icon("file", "row-icon")}\u6570\u636E</h4>
@@ -3181,6 +3371,9 @@
     root.querySelectorAll("[data-setting-toggle]").forEach(
       (input) => input.addEventListener("change", () => {
         patchSettings({ [input.dataset.settingToggle]: input.checked });
+        if (input.dataset.settingToggle === "notifyOnTrackChange" && input.checked) {
+          void Promise.resolve().then(() => (init_player(), player_exports)).then((module) => module.requestNotificationPermission());
+        }
       })
     );
     qs("#setting-clear-library", root)?.addEventListener("click", async () => {
@@ -3231,6 +3424,7 @@
     const muted = player.audio.muted || player.audio.volume === 0;
     const canPrev = Boolean(song && (player.audio.currentTime > 3 || state.queueIndex > 0));
     const canNext = Boolean(song && state.queueIndex < state.queue.length - 1);
+    const duration = Number.isFinite(player.audio.duration) ? player.audio.duration : 0;
     root.innerHTML = `<input id="mini-progress" class="mini-progress-top" type="range" min="0" max="1000" step="1" value="0" aria-label="\u64AD\u653E\u8FDB\u5EA6" ${song ? "" : "disabled"} />
     <button type="button" class="mini-info" id="mini-open" aria-label="\u6253\u5F00\u64AD\u653E\u9875" ${song ? "" : "disabled"}>
       ${coverMarkup(song, "small")}
@@ -3239,13 +3433,17 @@
         <small>${song ? `${escapeHtml(song.artist)}${song.album ? ` \xB7 ${escapeHtml(song.album)}` : ""}` : "\u5BFC\u5165\u6216\u641C\u7D22\u97F3\u4E50\u540E\u5F00\u59CB\u64AD\u653E"}</small>
       </span>
     </button>
-    <div class="mini-controls">
-      <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== "sequence" ? "is-active" : ""}" data-mini-action="mode" aria-label="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}" title="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}">${icon(modeIcon())}</button>
-      <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="\u4E0A\u4E00\u9996" ${canPrev ? "" : "disabled"}>${icon("previous")}</button>
-      <button type="button" class="play-button ripple ${state.isPlaying ? "is-playing" : ""}" data-mini-action="toggle" aria-label="${state.isPlaying ? "\u6682\u505C" : "\u64AD\u653E"}" ${song ? "" : "disabled"}>${icon(state.isPlaying ? "pause" : "play", "player-icon")}</button>
-      <button type="button" class="player-control ripple" data-mini-action="next" aria-label="\u4E0B\u4E00\u9996" ${canNext ? "" : "disabled"}>${icon("next")}</button>
+    <div class="mini-transport">
+      <span class="mini-time" id="mini-current">0:00</span>
+      <div class="mini-controls">
+        <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="\u4E0A\u4E00\u9996" ${canPrev ? "" : "disabled"}>${icon("previous")}</button>
+        <button type="button" class="play-button ripple ${state.isPlaying ? "is-playing" : ""}" data-mini-action="toggle" aria-label="${state.isPlaying ? "\u6682\u505C" : "\u64AD\u653E"}" ${song ? "" : "disabled"}>${icon(state.isPlaying ? "pause" : "play", "player-icon")}</button>
+        <button type="button" class="player-control ripple" data-mini-action="next" aria-label="\u4E0B\u4E00\u9996" ${canNext ? "" : "disabled"}>${icon("next")}</button>
+      </div>
+      <span class="mini-time is-right" id="mini-duration">${duration ? formatTime(duration) : "0:00"}</span>
     </div>
     <div class="mini-extra">
+      <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== "sequence" ? "is-active" : ""}" data-mini-action="mode" aria-label="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}" title="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}">${icon(modeIcon())}</button>
       <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? "\u53D6\u6D88\u9759\u97F3" : "\u9759\u97F3"}">${icon(muted ? "volumeMute" : "volume")}</button>
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="\u97F3\u91CF" />
     </div>`;
@@ -3407,9 +3605,19 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     const mini = qs("#mini-progress");
     if (mini && !miniDragging && document.activeElement !== mini)
       mini.value = String(Math.round(fraction * 1e3));
+    const miniCurrent = qs("#mini-current");
+    const miniDuration = qs("#mini-duration");
+    if (miniCurrent) miniCurrent.textContent = formatTime(audio2.currentTime);
+    if (miniDuration)
+      miniDuration.textContent = Number.isFinite(audio2.duration) ? formatTime(audio2.duration) : "0:00";
     const np = qs("#np-progress");
     if (np && !npDragging && document.activeElement !== np)
       np.value = String(Math.round(fraction * 1e3));
+    const npCurrent = qs("#np-current");
+    const npDuration = qs("#np-duration");
+    if (npCurrent) npCurrent.textContent = formatTime(audio2.currentTime);
+    if (npDuration)
+      npDuration.textContent = Number.isFinite(audio2.duration) ? formatTime(audio2.duration) : "0:00";
   }
   function updateLyricsHighlight() {
     if (!state.nowPlayingOpen) return;
@@ -3544,7 +3752,7 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     const avatar = qs("#account-avatar");
     if (!avatar) return;
     const account = state.account;
-    avatar.innerHTML = account?.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt="" onerror="this.remove()"/>` : icon("person");
+    avatar.innerHTML = account?.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt=""/>` : icon("person");
     avatar.classList.toggle("has-account", Boolean(account));
     const menu = qs("#account-menu");
     if (menu && !menu.hidden) fillAccountMenu();
@@ -3558,7 +3766,7 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     );
     const subtitle = account ? `${escapeHtml(installedPlugin(state.accountPluginId)?.name ?? "\u63D2\u4EF6\u8D26\u53F7")} \xB7 \u5DF2\u8FDE\u63A5` : hasAccountPlugin ? "\u767B\u5F55\u540E\u540C\u6B65\u8D26\u53F7\u5185\u5BB9" : "\u542F\u7528\u8D26\u53F7\u7C7B\u63D2\u4EF6\u540E\u53EF\u767B\u5F55";
     menu.innerHTML = `<div class="account-header">
-      <span class="account-avatar-large">${account?.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt="" onerror="this.remove()"/>` : icon("person")}</span>
+      <span class="account-avatar-large">${account?.avatarUrl ? `<img src="${escapeHtml(account.avatarUrl)}" alt=""/>` : icon("person")}</span>
       <span><strong>${account ? escapeHtml(account.name) : "\u672A\u767B\u5F55"}</strong>
       <small>${subtitle}</small></span>
     </div>
@@ -3623,14 +3831,24 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
       snackbar(error instanceof Error ? error.message : "\u63D2\u4EF6 ZIP \u65E0\u6CD5\u8BFB\u53D6\u3002");
     }
   }
-  function updateMaximizeIcon() {
-    const button = qs("#window-maximize");
+  function updateMaximizeIcon(maximized) {
+    const next = typeof maximized === "boolean" ? maximized : window.outerWidth >= window.screen.availWidth - 8 && window.outerHeight >= window.screen.availHeight - 8;
+    for (const id of ["#window-maximize", "#np-maximize"]) {
+      const button = qs(id);
+      if (!button) continue;
+      button.innerHTML = icon(next ? "restore" : "maximize");
+      button.setAttribute("aria-label", next ? "\u8FD8\u539F" : "\u6700\u5927\u5316");
+    }
+  }
+  function updateThemeToggleIcon() {
+    const button = qs("#theme-toggle");
     if (!button) return;
-    const maximized = window.outerWidth >= window.screen.availWidth - 8 && window.outerHeight >= window.screen.availHeight - 8;
-    button.innerHTML = icon(maximized ? "restore" : "maximize");
-    button.setAttribute("aria-label", maximized ? "\u8FD8\u539F" : "\u6700\u5927\u5316");
+    const dark = state.settings.mode === "dark";
+    button.innerHTML = icon(dark ? "sun" : "moon");
+    button.setAttribute("aria-label", dark ? "\u5207\u6362\u5230\u6D45\u8272\u6A21\u5F0F" : "\u5207\u6362\u5230\u6DF1\u8272\u6A21\u5F0F");
   }
   function bindShell() {
+    installImageErrorFallback();
     qsa("[data-icon]").forEach((element) => {
       element.innerHTML = icon(element.dataset.icon || "music");
     });
@@ -3649,8 +3867,11 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
       () => window.linmoDesktop?.window?.toggleMaximize()
     );
     qs("#np-close-window")?.addEventListener("click", () => window.linmoDesktop?.window?.close());
-    window.addEventListener("resize", updateMaximizeIcon);
+    window.linmoDesktop?.window?.onMaximized?.(updateMaximizeIcon);
+    window.addEventListener("resize", () => updateMaximizeIcon());
     updateMaximizeIcon();
+    updateThemeToggleIcon();
+    subscribe("theme", updateThemeToggleIcon);
     qs("#account-avatar")?.addEventListener("click", (event) => {
       event.stopPropagation();
       toggleAccountMenu();
@@ -3741,6 +3962,7 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     await bootPlugins();
     await refreshAccount();
     if (state.account) void fetchRecommendations();
+    if (state.settings.notifyOnTrackChange) requestNotificationPermission();
     initOnboarding();
   }
   void boot();

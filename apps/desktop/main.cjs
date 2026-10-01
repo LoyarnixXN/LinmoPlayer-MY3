@@ -61,6 +61,13 @@ function createWindow() {
     },
   });
 
+  const pushMaximized = () => {
+    window.webContents.send('window:maximized', window.isMaximized());
+  };
+  window.on('maximize', pushMaximized);
+  window.on('unmaximize', pushMaximized);
+  window.once('ready-to-show', pushMaximized);
+
   window.setMenuBarVisibility(false);
   window.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
