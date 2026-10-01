@@ -15,18 +15,6 @@ export interface PluginThemeSpec {
   readonly entry: string;
 }
 
-/**
- * An optional companion service bundled inside the plugin package. The host
- * runs it with its own Node runtime (no system Node required) while the
- * plugin is enabled, and terminates it on disable/uninstall/quit.
- */
-export interface PluginServiceSpec {
-  /** Script file inside the package, executed with the host's Node runtime. */
-  readonly entry: string;
-  /** Port the service is expected to listen on; used for readiness and as the default baseUrl. */
-  readonly port: number;
-}
-
 export interface PluginPackageManifest extends PluginManifest {
   readonly packageVersion: 1;
   readonly entry?: string;
@@ -35,7 +23,6 @@ export interface PluginPackageManifest extends PluginManifest {
   readonly config?: Readonly<Record<string, unknown>>;
   readonly theme?: PluginThemeSpec;
   readonly font?: PluginFontSpec;
-  readonly service?: PluginServiceSpec;
   readonly permissions?: readonly string[];
 }
 
@@ -120,7 +107,6 @@ export function validatePluginPackageManifest(input: unknown): PluginPackageMani
       ...(typeof manifest.entry === 'string' && isSafePackagePath(manifest.entry)
         ? { entry: manifest.entry }
         : {}),
-      ...(manifest.service !== undefined ? { service: validateServiceSpec(manifest.service) } : {}),
     };
   }
 
@@ -193,22 +179,6 @@ function isSafePackagePath(value: string): boolean {
     !value.includes('\\') &&
     !value.split('/').includes('..')
   );
-}
-
-function validateServiceSpec(input: unknown): PluginServiceSpec {
-  if (typeof input !== 'object' || input === null || Array.isArray(input))
-    throw new Error('service 必须是对象。');
-  const raw = input as Record<string, unknown>;
-  if (typeof raw.entry !== 'string' || !isSafePackagePath(raw.entry))
-    throw new Error('service.entry 路径非法。');
-  if (
-    raw.port === undefined ||
-    !Number.isInteger(raw.port) ||
-    (raw.port as number) <= 0 ||
-    (raw.port as number) > 65535
-  )
-    throw new Error('service.port 必须是 1-65535 的整数。');
-  return { entry: raw.entry, port: raw.port as number };
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
