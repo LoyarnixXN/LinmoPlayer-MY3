@@ -415,7 +415,7 @@ ipcMain.handle('plugin:start-service', async (_event, input) => {
   const script = path.join(pluginsRoot(), pluginId, 'files', entry);
   if (!fs.existsSync(script)) throw new Error('服务入口文件不存在。');
   const child = spawn(process.execPath, [script], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(port) },
     stdio: 'ignore',
     windowsHide: true,
   });
