@@ -281,7 +281,8 @@
         capabilities: [...new Set(capabilities)],
         provider: manifest.provider,
         ...manifest.config ? { config: manifest.config } : {},
-        ...typeof manifest.entry === "string" && isSafePackagePath(manifest.entry) ? { entry: manifest.entry } : {}
+        ...typeof manifest.entry === "string" && isSafePackagePath(manifest.entry) ? { entry: manifest.entry } : {},
+        ...manifest.service !== void 0 ? { service: validateServiceSpec(manifest.service) } : {}
       };
     }
     if (kind === "theme") {
@@ -309,6 +310,16 @@
   }
   function isSafePackagePath(value) {
     return value.length > 0 && value.length <= 240 && !value.startsWith("/") && !value.includes("\\") && !value.split("/").includes("..");
+  }
+  function validateServiceSpec(input) {
+    if (typeof input !== "object" || input === null || Array.isArray(input))
+      throw new Error("service \u5FC5\u987B\u662F\u5BF9\u8C61\u3002");
+    const raw = input;
+    if (typeof raw.entry !== "string" || !isSafePackagePath(raw.entry))
+      throw new Error("service.entry \u8DEF\u5F84\u975E\u6CD5\u3002");
+    if (raw.port === void 0 || !Number.isInteger(raw.port) || raw.port <= 0 || raw.port > 65535)
+      throw new Error("service.port \u5FC5\u987B\u662F 1-65535 \u7684\u6574\u6570\u3002");
+    return { entry: raw.entry, port: raw.port };
   }
   function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1222,6 +1233,20 @@
   async function startPlugin(meta) {
     if (meta.kind !== "music-source") return { ok: true };
     try {
+      if (meta.service?.entry) {
+        const started = await window.linmoDesktop?.plugins?.startService?.({
+          pluginId: meta.id,
+          entry: meta.service.entry,
+          port: meta.service.port
+        });
+        if (started && started.ok === false) throw new Error(started.error ?? "\u6346\u7ED1\u670D\u52A1\u542F\u52A8\u5931\u8D25\u3002");
+        if (meta.service.port && !meta.config?.baseUrl) {
+          meta.config = {
+            ...meta.config ?? {},
+            baseUrl: `http://127.0.0.1:${meta.service.port}`
+          };
+        }
+      }
       const plugin = createMusicSourcePlugin(manifestOf(meta));
       const registered = registry.register(plugin);
       if (!registered.ok) throw new Error(registered.error);
@@ -1261,6 +1286,7 @@
     if (meta.kind === "music-source") {
       await registry.disable(pluginId).catch(() => void 0);
       registry.unregister(pluginId);
+      await window.linmoDesktop?.plugins?.stopService?.(pluginId).catch?.(() => void 0);
     }
     persisters.plugins();
     publish("plugins");
@@ -1274,6 +1300,7 @@
   }
   async function uninstallPlugin(pluginId) {
     await disablePlugin(pluginId);
+    await window.linmoDesktop?.plugins?.stopService?.(pluginId).catch?.(() => void 0);
     state.plugins = state.plugins.filter((plugin) => plugin.id !== pluginId);
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith(`linmo.pluginStorage.${pluginId}.`)) localStorage.removeItem(key);
@@ -1498,7 +1525,7 @@
         search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
         library: '<path d="M5 4.5v15"/><path d="M9 5.5a2 2 0 0 1 2-2h7.5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H11a2 2 0 0 0-2 2"/><path d="M9.5 18.5h10"/>',
         plugins: '<path d="m12 2.8 2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5Z"/>',
-        settings: '<path d="M4.5 7.5h8M16.5 7.5h3M4.5 16.5h3M11.5 16.5h8M4.5 12h8M16.5 12h3"/><circle cx="14" cy="7.5" r="2.2"/><circle cx="9" cy="12" r="2.2"/><circle cx="14" cy="16.5" r="2.2"/>',
+        settings: '<path fill="currentColor" stroke="none" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58ZM12 15.6A3.6 3.6 0 1 1 15.6 12 3.6 3.6 0 0 1 12 15.6Z"/>',
         music: '<path d="M9 18.5V5.5l10-2.2v13"/><circle cx="6.5" cy="18.5" r="2.8"/><circle cx="16.5" cy="16.3" r="2.8"/>',
         play: '<path d="M8.2 5.2a.8.8 0 0 1 1.22-.68l10.4 6.8a.8.8 0 0 1 0 1.34l-10.4 6.8a.8.8 0 0 1-1.22-.68Z" fill="currentColor" stroke="none"/>',
         pause: '<path d="M7.5 5.5v13M16.5 5.5v13"/>',
@@ -3052,6 +3079,19 @@
     const meta = state.plugins.find((plugin) => plugin.id === pluginId);
     if (!meta) return;
     if (nextEnabled) {
+      const acked = localStorage.getItem("linmo.pluginRiskAck") === "1";
+      if (!acked) {
+        const confirmed = await confirmDialog(
+          "\u542F\u7528\u63D2\u4EF6",
+          "\u63D2\u4EF6\u7531\u7B2C\u4E09\u65B9\u63D0\u4F9B\uFF0C\u542F\u7528\u540E\u53EF\u80FD\u6309\u5176\u914D\u7F6E\u8FDE\u63A5\u5916\u90E8\u7F51\u7EDC\u670D\u52A1\u3002\u8BF7\u4EC5\u542F\u7528\u4F60\u4FE1\u4EFB\u6765\u6E90\u7684\u63D2\u4EF6\u3002",
+          "\u4ECD\u7136\u542F\u7528"
+        );
+        if (!confirmed) {
+          publish("plugins");
+          return;
+        }
+        localStorage.setItem("linmo.pluginRiskAck", "1");
+      }
       const result = await enablePlugin(pluginId);
       if (!result.ok) {
         snackbar(`\u542F\u7528\u5931\u8D25\uFF1A${result.error}`);
@@ -3239,14 +3279,12 @@
         <small>${song ? `${escapeHtml(song.artist)}${song.album ? ` \xB7 ${escapeHtml(song.album)}` : ""}` : "\u5BFC\u5165\u6216\u641C\u7D22\u97F3\u4E50\u540E\u5F00\u59CB\u64AD\u653E"}</small>
       </span>
     </button>
-    <span class="mini-time" id="mini-current">${formatTime(player.audio.currentTime)}</span>
     <div class="mini-controls">
       <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== "sequence" ? "is-active" : ""}" data-mini-action="mode" aria-label="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}" title="\u64AD\u653E\u65B9\u5F0F\uFF1A${modeLabel()}">${icon(modeIcon())}</button>
       <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="\u4E0A\u4E00\u9996" ${canPrev ? "" : "disabled"}>${icon("previous")}</button>
       <button type="button" class="play-button ripple ${state.isPlaying ? "is-playing" : ""}" data-mini-action="toggle" aria-label="${state.isPlaying ? "\u6682\u505C" : "\u64AD\u653E"}" ${song ? "" : "disabled"}>${icon(state.isPlaying ? "pause" : "play", "player-icon")}</button>
       <button type="button" class="player-control ripple" data-mini-action="next" aria-label="\u4E0B\u4E00\u9996" ${canNext ? "" : "disabled"}>${icon("next")}</button>
     </div>
-    <span class="mini-time" id="mini-duration">${formatTime(player.audio.duration)}</span>
     <div class="mini-extra">
       <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? "\u53D6\u6D88\u9759\u97F3" : "\u9759\u97F3"}">${icon(muted ? "volumeMute" : "volume")}</button>
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="\u97F3\u91CF" />
@@ -3290,7 +3328,7 @@
         const url = await fetchCover(song);
         if (!url || state.currentSong?.key !== song.key) return;
         overlay.style.setProperty("--np-cover-image", `url("${url}")`);
-        const el = qs("#np-cover", overlay);
+        const el = qs("#np-cover .cover", overlay) ?? qs("#np-cover", overlay);
         if (!el) return;
         const img = document.createElement("img");
         img.src = url;
@@ -3412,14 +3450,6 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     const np = qs("#np-progress");
     if (np && !npDragging && document.activeElement !== np)
       np.value = String(Math.round(fraction * 1e3));
-    const miniCurrent = qs("#mini-current");
-    const miniDuration = qs("#mini-duration");
-    if (miniCurrent) miniCurrent.textContent = formatTime(audio2.currentTime);
-    if (miniDuration) miniDuration.textContent = formatTime(audio2.duration);
-    const npCurrent = qs("#np-current");
-    const npDuration = qs("#np-duration");
-    if (npCurrent) npCurrent.textContent = formatTime(audio2.currentTime);
-    if (npDuration) npDuration.textContent = formatTime(audio2.duration);
   }
   function updateLyricsHighlight() {
     if (!state.nowPlayingOpen) return;
@@ -3615,6 +3645,23 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     menu.classList.remove("is-open");
     qs("#account-avatar")?.setAttribute("aria-expanded", "false");
   }
+  var RISK_ACK_KEY = "linmo.pluginRiskAck";
+  async function pluginRiskConfirm(kindLabel, name) {
+    const acknowledged = localStorage.getItem(RISK_ACK_KEY) === "1";
+    if (acknowledged) return true;
+    const confirmed = await openDialog({
+      eyebrow: kindLabel,
+      title: `\u5B89\u88C5\u300C${name}\u300D\uFF1F`,
+      body: `<p class="risk-text">\u63D2\u4EF6\u7531\u7B2C\u4E09\u65B9\u63D0\u4F9B\uFF0C\u542F\u7528\u540E\u53EF\u80FD\u6309\u5176\u914D\u7F6E\u8FDE\u63A5\u5916\u90E8\u7F51\u7EDC\u670D\u52A1\u3001\u83B7\u53D6\u5E76\u5C55\u793A\u7B2C\u4E09\u65B9\u5185\u5BB9\u3002\u8BF7\u4EC5\u5B89\u88C5\u4F60\u4FE1\u4EFB\u6765\u6E90\u7684\u63D2\u4EF6\u5305\uFF1B\u5B89\u88C5\u6216\u542F\u7528\u524D\u8BF7\u81EA\u884C\u786E\u8BA4\u5176\u6765\u6E90\u4E0E\u5185\u5BB9\u3002</p>
+      <label class="risk-ack"><input type="checkbox" id="risk-ack"/><span>\u6211\u5DF2\u4E86\u89E3\u98CE\u9669\uFF0C\u540C\u7C7B\u63D0\u793A\u4E0D\u518D\u663E\u793A</span></label>`,
+      confirmLabel: "\u4ECD\u7136\u5B89\u88C5",
+      cancelLabel: "\u53D6\u6D88",
+      danger: true
+    });
+    if (!confirmed) return false;
+    if (qs("#risk-ack", confirmed)?.checked) localStorage.setItem(RISK_ACK_KEY, "1");
+    return true;
+  }
   async function importPluginZip(file) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -3624,6 +3671,13 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
         throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u4E3B\u9898\u6587\u4EF6\uFF1A${manifest.theme.entry}`);
       if (manifest.kind === "font" && !installed.fileNames.includes(manifest.font.file))
         throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u5B57\u4F53\u6587\u4EF6\uFF1A${manifest.font.file}`);
+      const kindLabel = { "music-source": "MUSIC SOURCE", theme: "THEME", font: "FONT" }[manifest.kind];
+      const approved = await pluginRiskConfirm(kindLabel, manifest.name);
+      if (!approved) {
+        await window.linmoDesktop.plugins.uninstall(manifest.id).catch(() => void 0);
+        snackbar("\u5DF2\u53D6\u6D88\u5B89\u88C5");
+        return;
+      }
       const meta = { ...manifest, enabled: false, status: "" };
       state.plugins = [...state.plugins.filter((plugin) => plugin.id !== meta.id), meta];
       persisters.plugins();

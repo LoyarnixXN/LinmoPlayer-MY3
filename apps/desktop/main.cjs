@@ -1,5 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, net, dialog, session, protocol } = require('electron');
 const path = require('node:path');
+const nodeNet = require('node:net');
+const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const AdmZip = require('adm-zip');
@@ -209,8 +211,90 @@ ipcMain.handle('plugin:read-file', async (_event, input) => {
 ipcMain.handle('plugin:uninstall', async (_event, pluginId) => {
   const id = String(pluginId ?? '');
   if (!/^[a-z0-9][a-z0-9._-]{1,63}$/.test(id)) throw new Error('插件 ID 非法。');
+  stopPluginService(id);
   await fsp.rm(path.join(pluginsRoot(), id), { recursive: true, force: true });
   return true;
+});
+
+/* ---------------- bundled plugin services ----------------
+ * Plugins may ship a Node service (e.g. a self-hosted API proxy). The host
+ * runs it with its own runtime (ELECTRON_RUN_AS_NODE) while the plugin is
+ * enabled — no system Node installation is required. */
+
+const runningServices = new Map(); // pluginId -> child process
+
+function stopPluginService(pluginId) {
+  const child = runningServices.get(pluginId);
+  if (!child) return;
+  runningServices.delete(pluginId);
+  try {
+    child.kill();
+  } catch {
+    /* already gone */
+  }
+}
+
+function stopAllServices() {
+  for (const child of runningServices.values()) {
+    try {
+      child.kill();
+    } catch {
+      /* already gone */
+    }
+  }
+  runningServices.clear();
+}
+
+function probePort(port) {
+  return new Promise((resolve) => {
+    const socket = nodeNet.connect(port, '127.0.0.1');
+    const done = (value) => {
+      socket.destroy();
+      resolve(value);
+    };
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false));
+    setTimeout(() => done(false), 600);
+  });
+}
+
+ipcMain.handle('plugin:start-service', async (_event, input) => {
+  const pluginId = String(input?.pluginId ?? '');
+  if (!/^[a-z0-9][a-z0-9._-]{1,63}$/.test(pluginId)) throw new Error('插件 ID 非法。');
+  const entry = String(input?.entry ?? '');
+  if (!entry || entry.startsWith('/') || entry.includes('\\') || entry.split('/').includes('..'))
+    throw new Error('服务入口路径非法。');
+  const port = Number(input?.port ?? 0);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('服务端口非法。');
+  if (runningServices.has(pluginId)) return { ok: true, alreadyRunning: true };
+  const script = path.join(pluginsRoot(), pluginId, 'files', entry);
+  if (!fs.existsSync(script)) throw new Error('服务入口文件不存在。');
+  const child = spawn(process.execPath, [script], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  runningServices.set(pluginId, child);
+  child.on('exit', () => runningServices.delete(pluginId));
+  // Wait briefly for the port so the first request does not race the startup.
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (await probePort(port)) return { ok: true, ready: true };
+    if (!runningServices.has(pluginId)) return { ok: false, error: '服务进程提前退出。' };
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return { ok: true, ready: false };
+});
+
+ipcMain.handle('plugin:stop-service', (_event, pluginId) => {
+  stopPluginService(String(pluginId ?? ''));
+  return true;
+});
+
+app.on('before-quit', stopAllServices);
+app.on('window-all-closed', () => {
+  stopAllServices();
+  if (process.platform !== 'darwin') app.quit();
 });
 
 ipcMain.on('window:minimize', (event) => windowFromEvent(event)?.minimize());
@@ -234,8 +318,4 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
 });

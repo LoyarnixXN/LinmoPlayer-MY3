@@ -35,14 +35,12 @@ export function renderMiniPlayer() {
         <small>${song ? `${escapeHtml(song.artist)}${song.album ? ` · ${escapeHtml(song.album)}` : ''}` : '导入或搜索音乐后开始播放'}</small>
       </span>
     </button>
-    <span class="mini-time" id="mini-current">${formatTime(player.audio.currentTime)}</span>
     <div class="mini-controls">
       <button type="button" class="player-control ripple mode-control ${state.settings.playbackMode !== 'sequence' ? 'is-active' : ''}" data-mini-action="mode" aria-label="播放方式：${modeLabel()}" title="播放方式：${modeLabel()}">${icon(modeIcon())}</button>
       <button type="button" class="player-control ripple" data-mini-action="previous" aria-label="上一首" ${canPrev ? '' : 'disabled'}>${icon('previous')}</button>
       <button type="button" class="play-button ripple ${state.isPlaying ? 'is-playing' : ''}" data-mini-action="toggle" aria-label="${state.isPlaying ? '暂停' : '播放'}" ${song ? '' : 'disabled'}>${icon(state.isPlaying ? 'pause' : 'play', 'player-icon')}</button>
       <button type="button" class="player-control ripple" data-mini-action="next" aria-label="下一首" ${canNext ? '' : 'disabled'}>${icon('next')}</button>
     </div>
-    <span class="mini-time" id="mini-duration">${formatTime(player.audio.duration)}</span>
     <div class="mini-extra">
       <button type="button" class="player-control ripple" data-mini-action="mute" aria-label="${muted ? '取消静音' : '静音'}">${icon(muted ? 'volumeMute' : 'volume')}</button>
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="音量" />
@@ -95,7 +93,7 @@ export function renderNowPlaying() {
       const url = await fetchCover(song);
       if (!url || state.currentSong?.key !== song.key) return;
       overlay.style.setProperty('--np-cover-image', `url("${url}")`);
-      const el = qs('#np-cover', overlay);
+      const el = qs('#np-cover .cover', overlay) ?? qs('#np-cover', overlay);
       if (!el) return;
       const img = document.createElement('img');
       img.src = url;
@@ -235,14 +233,6 @@ export function updateProgressUI() {
   const np = qs('#np-progress');
   if (np && !npDragging && document.activeElement !== np)
     np.value = String(Math.round(fraction * 1000));
-  const miniCurrent = qs('#mini-current');
-  const miniDuration = qs('#mini-duration');
-  if (miniCurrent) miniCurrent.textContent = formatTime(audio.currentTime);
-  if (miniDuration) miniDuration.textContent = formatTime(audio.duration);
-  const npCurrent = qs('#np-current');
-  const npDuration = qs('#np-duration');
-  if (npCurrent) npCurrent.textContent = formatTime(audio.currentTime);
-  if (npDuration) npDuration.textContent = formatTime(audio.duration);
 }
 
 function updateLyricsHighlight() {

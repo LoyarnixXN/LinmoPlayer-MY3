@@ -20,14 +20,15 @@ export class PlaylistAggregator {
   ) {}
 
   public async syncPlugin(pluginId: PluginId): Promise<SyncSummary> {
-    const result = await this.registry.invoke(pluginId, 'playlists', async (plugin) => {
-      if (!plugin.listUserPlaylists) throw new Error('Playlist capability is not implemented.');
-      return plugin.listUserPlaylists();
-    });
+    const record = this.registry.get(pluginId);
+    if (!record || record.status !== 'enabled') return { pluginId, synced: 0, failed: true };
+    if (!record.plugin.listUserPlaylists) return { pluginId, synced: 0, failed: false };
+
+    const result = await this.registry.invoke(pluginId, 'playlists', (plugin) =>
+      plugin.listUserPlaylists!(),
+    );
     if (!result.ok) return { pluginId, synced: 0, failed: true };
 
-    const record = this.registry.get(pluginId);
-    if (!record) return { pluginId, synced: 0, failed: true };
     let synced = 0;
     for (const remotePlaylist of result.value) {
       const playlist = toUnifiedPlaylist(record.plugin, remotePlaylist);
