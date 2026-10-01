@@ -510,7 +510,7 @@ function renderPlaylistDetail(root) {
       <span class="playlist-cover large">${icon('music')}</span>
       <div class="playlist-hero-copy">
         <div class="eyebrow">${isLocal ? '本地歌单' : `远程歌单 · ${escapeHtml(sourceName(playlist.pluginId))}`}</div>
-        <h2>${escapeHtml(playlist.title)}</h2>
+        <h2>${escapeHtml(isLocal ? (playlist.name ?? '') : (playlist.title ?? ''))}</h2>
         <p>${songs.length} 首</p>
         <div class="heading-actions">
           <button type="button" class="filled-button ripple" id="playlist-play" ${songs.length ? '' : 'disabled'}>${icon('play', 'button-icon')}播放全部</button>

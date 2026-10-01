@@ -2435,6 +2435,7 @@
     const playlist = {
       id: nextPlaylistId(),
       name,
+      title: name,
       songs: [],
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -2460,6 +2461,7 @@
     const name = String(qs("#playlist-name", layer)?.value ?? "").trim();
     if (!name || name === playlist.name) return;
     playlist.name = name;
+    playlist.title = name;
     playlist.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     persisters.playlists();
     publish("playlists");
@@ -3029,7 +3031,7 @@
       <span class="playlist-cover large">${icon("music")}</span>
       <div class="playlist-hero-copy">
         <div class="eyebrow">${isLocal ? "\u672C\u5730\u6B4C\u5355" : `\u8FDC\u7A0B\u6B4C\u5355 \xB7 ${escapeHtml(sourceName(playlist.pluginId))}`}</div>
-        <h2>${escapeHtml(playlist.title)}</h2>
+        <h2>${escapeHtml(isLocal ? playlist.name ?? "" : playlist.title ?? "")}</h2>
         <p>${songs.length} \u9996</p>
         <div class="heading-actions">
           <button type="button" class="filled-button ripple" id="playlist-play" ${songs.length ? "" : "disabled"}>${icon("play", "button-icon")}\u64AD\u653E\u5168\u90E8</button>
@@ -4049,20 +4051,18 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     return true;
   }
   async function importPluginZip(file) {
+    let installedId = null;
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const installed = await window.linmoDesktop.plugins.install(bytes);
+      installedId = installed.manifest?.manifest?.id ?? installed.manifest?.id ?? null;
       const manifest = validatePluginPackageManifest(installed.manifest);
-      if (manifest.kind === "theme" && !installed.fileNames.includes(manifest.theme.entry))
-        throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u4E3B\u9898\u6587\u4EF6\uFF1A${manifest.theme.entry}`);
-      if (manifest.kind === "font" && !installed.fileNames.includes(manifest.font.file))
-        throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u5B57\u4F53\u6587\u4EF6\uFF1A${manifest.font.file}`);
-      if (manifest.service && !installed.fileNames.includes(manifest.service.entry))
-        throw new Error(`\u63D2\u4EF6\u7F3A\u5C11\u670D\u52A1\u5165\u53E3\u6587\u4EF6\uFF1A${manifest.service.entry}`);
+      installedId = manifest.id;
       const kindLabel = { "music-source": "MUSIC SOURCE", theme: "THEME", font: "FONT" }[manifest.kind];
       const approved = await pluginRiskConfirm(kindLabel, manifest.name);
       if (!approved) {
         await window.linmoDesktop.plugins.uninstall(manifest.id).catch(() => void 0);
+        installedId = null;
         snackbar("\u5DF2\u53D6\u6D88\u5B89\u88C5");
         return;
       }
@@ -4090,6 +4090,12 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
         snackbar(`\u5DF2\u5B89\u88C5\u300C${meta.name}\u300D\uFF0C\u542F\u7528\u524D\u8BF7\u5B8C\u6210\u6743\u9650\u6388\u6743`);
       else snackbar(`\u5DF2\u5B89\u88C5\u300C${meta.name}\u300D\uFF0C\u53EF\u5728\u5217\u8868\u4E2D\u542F\u7528`);
     } catch (error) {
+      if (installedId) {
+        await window.linmoDesktop.plugins.uninstall(installedId).catch(() => void 0);
+        state.plugins = state.plugins.filter((plugin) => plugin.id !== installedId);
+        persisters.plugins();
+        publish("plugins");
+      }
       snackbar(error instanceof Error ? error.message : "\u63D2\u4EF6 ZIP \u65E0\u6CD5\u8BFB\u53D6\u3002");
     }
   }

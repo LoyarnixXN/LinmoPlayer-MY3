@@ -135,6 +135,139 @@ function assertSafeRelativeName(value) {
     throw new Error('非法的插件文件路径。');
 }
 
+const PLUGIN_PACKAGE_VERSION = 1;
+const HOST_API_MAJOR = '1';
+const PLUGIN_KINDS = new Set(['music-source', 'theme', 'font']);
+const PLUGIN_CAPABILITIES = new Set([
+  'search',
+  'playback',
+  'lyrics',
+  'playlists',
+  'account',
+  'recommendations',
+  'favorites',
+  'local-files',
+]);
+const PLUGIN_PERMISSIONS = new Set(['network', 'secure-storage', 'notifications', 'media-library']);
+const PLUGIN_PROVIDERS = new Set(['gdstudio', 'netease-api']);
+const PLUGIN_VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+
+function isSafePackagePath(value) {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 240 &&
+    !value.startsWith('/') &&
+    !value.includes('\\') &&
+    !value.split('/').includes('..')
+  );
+}
+
+function isInsideDirectory(rootDir, candidate) {
+  const resolvedRoot = path.resolve(rootDir);
+  const resolved = path.resolve(candidate);
+  return resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep);
+}
+
+/**
+ * Full manifest + package-content validation in the main process.
+ * Throws before any plugin directory write when the package is invalid.
+ */
+function validatePluginPackagePayload(manifestRaw, fileNames) {
+  if (typeof manifestRaw !== 'object' || manifestRaw === null || Array.isArray(manifestRaw))
+    throw new Error('插件包缺少 plugin.json。');
+  const manifest =
+    typeof manifestRaw.manifest === 'object' && manifestRaw.manifest !== null
+      ? manifestRaw.manifest
+      : manifestRaw;
+  const kind = manifest.kind === undefined ? 'music-source' : manifest.kind;
+  if (!PLUGIN_KINDS.has(kind)) throw new Error(`插件类型无效：${String(kind)}。`);
+  if (
+    manifest.packageVersion !== PLUGIN_PACKAGE_VERSION ||
+    typeof manifest.id !== 'string' ||
+    !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(manifest.id) ||
+    typeof manifest.name !== 'string' ||
+    !manifest.name.trim() ||
+    typeof manifest.version !== 'string' ||
+    !PLUGIN_VERSION_RE.test(manifest.version.trim()) ||
+    typeof manifest.hostApiVersion !== 'string' ||
+    manifest.hostApiVersion.split('.')[0] !== HOST_API_MAJOR
+  ) {
+    throw new Error(
+      '插件包清单无效：需要 packageVersion=1、合法 ID、名称、语义化版本（x.y.z）和兼容的宿主 API 版本。',
+    );
+  }
+
+  const fileSet = new Set(fileNames);
+  if (kind === 'music-source') {
+    const capabilities = manifest.capabilities;
+    if (!Array.isArray(capabilities) || capabilities.length === 0)
+      throw new Error('音源插件必须声明至少一个能力。');
+    if (capabilities.some((item) => !PLUGIN_CAPABILITIES.has(item)))
+      throw new Error('音源插件声明了未支持的能力。');
+    if (typeof manifest.provider !== 'string' || !PLUGIN_PROVIDERS.has(manifest.provider))
+      throw new Error('音源插件必须声明受支持的 provider。');
+    if (manifest.config !== undefined) {
+      if (
+        typeof manifest.config !== 'object' ||
+        manifest.config === null ||
+        Array.isArray(manifest.config)
+      )
+        throw new Error('音源插件 config 必须是对象。');
+      if (
+        manifest.config.baseUrl !== undefined &&
+        (typeof manifest.config.baseUrl !== 'string' ||
+          !/^https?:\/\//.test(manifest.config.baseUrl))
+      )
+        throw new Error('音源插件 config.baseUrl 必须是 http(s) 地址。');
+    }
+    if (manifest.entry !== undefined) {
+      if (!isSafePackagePath(manifest.entry)) throw new Error('插件 entry 路径非法。');
+      if (!fileSet.has(manifest.entry)) throw new Error(`插件入口文件不存在：${manifest.entry}`);
+    }
+    if (manifest.service !== undefined) {
+      const service = manifest.service;
+      if (typeof service !== 'object' || service === null || Array.isArray(service))
+        throw new Error('service 必须是对象。');
+      if (!isSafePackagePath(service.entry)) throw new Error('service.entry 路径非法。');
+      if (!Number.isInteger(service.port) || service.port <= 0 || service.port > 65535)
+        throw new Error('service.port 必须是 1-65535 的整数。');
+      if (!fileSet.has(service.entry)) throw new Error(`插件缺少服务入口文件：${service.entry}`);
+    }
+  } else if (
+    Array.isArray(manifest.capabilities) &&
+    manifest.capabilities.some((item) => !PLUGIN_CAPABILITIES.has(item))
+  ) {
+    throw new Error('插件声明了未支持的能力。');
+  }
+
+  const declaredRaw = Array.isArray(manifest.permissions) ? manifest.permissions : [];
+  if (declaredRaw.some((item) => typeof item !== 'string' || !PLUGIN_PERMISSIONS.has(item)))
+    throw new Error('插件声明了未支持的权限。');
+
+  if (kind === 'theme') {
+    const entry = manifest.theme?.entry ?? 'theme.json';
+    if (!isSafePackagePath(entry)) throw new Error('主题插件 theme.entry 路径非法。');
+    if (!fileSet.has(entry)) throw new Error(`插件缺少主题文件：${entry}`);
+  }
+
+  if (kind === 'font') {
+    const font = manifest.font;
+    if (
+      !font ||
+      typeof font.family !== 'string' ||
+      !font.family.trim() ||
+      typeof font.file !== 'string' ||
+      !isSafePackagePath(font.file)
+    ) {
+      throw new Error('字体插件需要声明 font.family 和 font.file。');
+    }
+    if (!fileSet.has(font.file)) throw new Error(`插件缺少字体文件：${font.file}`);
+  }
+
+  return manifest;
+}
+
 async function scanFolderForAudio(directory, depth, collected) {
   if (depth > FOLDER_SCAN_MAX_DEPTH || collected.length >= FOLDER_SCAN_MAX_FILES) return;
   let entries;
@@ -201,9 +334,9 @@ ipcMain.handle('library:pick-folder', async (event) => {
 });
 
 /**
- * Install a declarative plugin ZIP: validate archive safety, persist the
- * package under userData/plugins/<id>/ and extract data files next to it.
- * Records sha256 integrity and keeps one previous-version backup for rollback.
+ * Install a declarative plugin ZIP: validate archive safety + full manifest
+ * in the main process BEFORE any write, stage files, then publish to
+ * userData/plugins/<id>/. Records sha256 integrity and keeps one backup.
  */
 ipcMain.handle('plugin:install', (_event, bytes) => {
   const zip = new AdmZip(Buffer.from(bytes));
@@ -224,56 +357,79 @@ ipcMain.handle('plugin:install', (_event, bytes) => {
     (entry) => entry.entryName.replace(/^\.\//, '') === 'plugin.json',
   );
   if (!manifestEntry) throw new Error('插件 ZIP 根目录必须包含 plugin.json。');
+
+  // Full validation before touching disk (id/version/kind/permissions/service/theme/font).
   const manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
-  const resolved = manifest.manifest || manifest;
-  if (typeof resolved.id !== 'string' || !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(resolved.id))
-    throw new Error('插件包清单无效：ID 不合法。');
-  const version = String(resolved.version ?? '').trim();
-  if (!version) throw new Error('插件包清单无效：缺少版本。');
+  const resolved = validatePluginPackagePayload(manifest, names);
+  const version = String(resolved.version).trim();
+  if (!PLUGIN_VERSION_RE.test(version)) throw new Error('插件包清单无效：版本号格式非法。');
+  const zipName = `${version}.zip`;
 
   const pluginDirectory = path.join(pluginsRoot(), resolved.id);
-  fs.mkdirSync(pluginDirectory, { recursive: true });
-  const zipName = `${version}.zip`;
+  if (!isInsideDirectory(pluginsRoot(), pluginDirectory)) throw new Error('插件安装路径非法。');
   const zipPath = path.join(pluginDirectory, zipName);
-  const previousIntegrity = readIntegrityFile(pluginDirectory);
-  fs.writeFileSync(zipPath, Buffer.from(bytes));
+  if (!isInsideDirectory(pluginDirectory, zipPath)) throw new Error('插件包保存路径非法。');
+
   const checksum = crypto.createHash('sha256').update(Buffer.from(bytes)).digest('hex');
-  writeIntegrityFile(pluginDirectory, {
-    pluginId: resolved.id,
-    version,
-    checksum,
-    algorithm: 'sha256',
-    installedAt: new Date().toISOString(),
-    fileName: zipName,
-  });
-  const filesDirectory = path.join(pluginDirectory, 'files');
-  // Keep a single rollback snapshot of the previous extracted tree.
-  if (fs.existsSync(filesDirectory)) {
-    const backupDirectory = path.join(pluginDirectory, 'backup');
-    fs.rmSync(backupDirectory, { recursive: true, force: true });
-    fs.mkdirSync(backupDirectory, { recursive: true });
-    copyDirectorySync(filesDirectory, backupDirectory);
-    if (previousIntegrity)
-      fs.writeFileSync(
-        path.join(backupDirectory, '.previous-version.json'),
-        JSON.stringify({
-          version: previousIntegrity.version,
-          fileName: previousIntegrity.fileName,
-        }),
-      );
+  const previousIntegrity = readIntegrityFile(pluginDirectory);
+
+  // Stage into a temp directory under pluginsRoot, then publish atomically.
+  const staging = path.join(
+    pluginsRoot(),
+    `.staging-${resolved.id}-${crypto.randomBytes(6).toString('hex')}`,
+  );
+  const stagingFiles = path.join(staging, 'files');
+  try {
+    fs.mkdirSync(stagingFiles, { recursive: true });
+    fs.writeFileSync(path.join(staging, zipName), Buffer.from(bytes));
+    for (const entry of entries) {
+      const name = entry.entryName.replace(/^\.\//, '');
+      const target = path.join(stagingFiles, name);
+      if (!isInsideDirectory(stagingFiles, target))
+        throw new Error(`插件包包含非法路径：${entry.entryName}`);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, entry.getData());
+    }
+    writeIntegrityFile(staging, {
+      pluginId: resolved.id,
+      version,
+      checksum,
+      algorithm: 'sha256',
+      installedAt: new Date().toISOString(),
+      fileName: zipName,
+    });
+
+    fs.mkdirSync(pluginDirectory, { recursive: true });
+    const filesDirectory = path.join(pluginDirectory, 'files');
+    if (fs.existsSync(filesDirectory)) {
+      const backupDirectory = path.join(pluginDirectory, 'backup');
+      fs.rmSync(backupDirectory, { recursive: true, force: true });
+      fs.mkdirSync(backupDirectory, { recursive: true });
+      copyDirectorySync(filesDirectory, backupDirectory);
+      if (previousIntegrity)
+        fs.writeFileSync(
+          path.join(backupDirectory, '.previous-version.json'),
+          JSON.stringify({
+            version: previousIntegrity.version,
+            fileName: previousIntegrity.fileName,
+          }),
+        );
+    }
+    fs.rmSync(filesDirectory, { recursive: true, force: true });
+    fs.renameSync(stagingFiles, filesDirectory);
+    fs.copyFileSync(path.join(staging, zipName), zipPath);
+    fs.copyFileSync(
+      path.join(staging, 'integrity.json'),
+      path.join(pluginDirectory, 'integrity.json'),
+    );
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
   }
-  fs.rmSync(filesDirectory, { recursive: true, force: true });
-  fs.mkdirSync(filesDirectory, { recursive: true });
-  for (const entry of entries) {
-    const name = entry.entryName.replace(/^\.\//, '');
-    const target = path.join(filesDirectory, name);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, entry.getData());
-  }
+
   return {
     manifest,
     fileNames: names,
-    filesDirectory,
+    filesDirectory: path.join(pluginDirectory, 'files'),
     integrity: {
       checksum,
       version,

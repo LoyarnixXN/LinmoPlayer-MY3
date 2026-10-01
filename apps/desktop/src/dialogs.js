@@ -30,6 +30,7 @@ export async function createPlaylistDialog() {
   const playlist = {
     id: nextPlaylistId(),
     name,
+    title: name,
     songs: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -56,6 +57,7 @@ export async function renamePlaylistDialog(playlistId) {
   const name = String(qs('#playlist-name', layer)?.value ?? '').trim();
   if (!name || name === playlist.name) return;
   playlist.name = name;
+  playlist.title = name;
   playlist.updatedAt = new Date().toISOString();
   persisters.playlists();
   publish('playlists');

@@ -186,22 +186,20 @@ async function pluginRiskConfirm(kindLabel, name) {
 }
 
 async function importPluginZip(file) {
+  let installedId = null;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const installed = await window.linmoDesktop.plugins.install(bytes);
+    installedId = installed.manifest?.manifest?.id ?? installed.manifest?.id ?? null;
     const manifest = validatePluginPackageManifest(installed.manifest);
-    if (manifest.kind === 'theme' && !installed.fileNames.includes(manifest.theme.entry))
-      throw new Error(`插件缺少主题文件：${manifest.theme.entry}`);
-    if (manifest.kind === 'font' && !installed.fileNames.includes(manifest.font.file))
-      throw new Error(`插件缺少字体文件：${manifest.font.file}`);
-    if (manifest.service && !installed.fileNames.includes(manifest.service.entry))
-      throw new Error(`插件缺少服务入口文件：${manifest.service.entry}`);
+    installedId = manifest.id;
     const kindLabel = { 'music-source': 'MUSIC SOURCE', theme: 'THEME', font: 'FONT' }[
       manifest.kind
     ];
     const approved = await pluginRiskConfirm(kindLabel, manifest.name);
     if (!approved) {
       await window.linmoDesktop.plugins.uninstall(manifest.id).catch(() => undefined);
+      installedId = null;
       snackbar('已取消安装');
       return;
     }
@@ -234,6 +232,12 @@ async function importPluginZip(file) {
       snackbar(`已安装「${meta.name}」，启用前请完成权限授权`);
     else snackbar(`已安装「${meta.name}」，可在列表中启用`);
   } catch (error) {
+    if (installedId) {
+      await window.linmoDesktop.plugins.uninstall(installedId).catch(() => undefined);
+      state.plugins = state.plugins.filter((plugin) => plugin.id !== installedId);
+      persisters.plugins();
+      publish('plugins');
+    }
     snackbar(error instanceof Error ? error.message : '插件 ZIP 无法读取。');
   }
 }
