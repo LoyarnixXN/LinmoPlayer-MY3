@@ -93,6 +93,12 @@
   --icon-lg: 24px;
   --icon-xl: 32px;
   --icon-2xl: 44px;
+  --mini-player-height: 72px;
+  --mini-player-bottom: 20px;
+  --mini-player-safe: 40px;
+  --page-viewport-pad-bottom: calc(
+    var(--mini-player-height) + var(--mini-player-bottom) + var(--mini-player-safe)
+  );
 
   color-scheme: light;
 }
@@ -596,7 +602,8 @@ h4 {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 28px 120px;
+  padding: 4px 28px var(--page-viewport-pad-bottom);
+  scroll-padding-bottom: var(--page-viewport-pad-bottom);
 }
 
 .page {
@@ -1949,13 +1956,13 @@ h4 {
   position: absolute;
   left: 16px;
   right: 16px;
-  bottom: 20px;
+  bottom: var(--mini-player-bottom);
   z-index: 20;
   display: grid;
   grid-template-columns: minmax(160px, 1.1fr) minmax(280px, 1.5fr) minmax(160px, 1.1fr);
   align-items: center;
   gap: 12px;
-  height: 72px;
+  height: var(--mini-player-height);
   padding: 0 16px;
   border-radius: 18px;
   background: color-mix(in srgb, var(--m3-surface-container-high) 78%, transparent);
@@ -2699,10 +2706,13 @@ html[data-mode='dark'] .snackbar {
 /* ---------------- responsive mini player / Now Playing ---------------- */
 
 @media (max-width: 960px) {
+  :root {
+    --mini-player-height: 68px;
+    --mini-player-bottom: 16px;
+  }
+
   .mini-player {
     grid-template-columns: minmax(120px, 1fr) minmax(220px, 1.4fr) auto;
-    height: 68px;
-    bottom: 16px;
   }
 
   .mini-extra .volume-slider {

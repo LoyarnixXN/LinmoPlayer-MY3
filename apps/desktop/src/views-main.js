@@ -54,8 +54,8 @@ export function songRow(song, list, index, options = {}) {
   const duration = song.durationMs ? formatTime(song.durationMs / 1000) : '';
   const actions = options.removable
     ? `<button type="button" class="row-action ripple" data-row-remove="${index}" aria-label="从歌单移除">${icon('delete')}</button>`
-    : `<button type="button" class="row-action ripple" data-row-queue="${index}" aria-label="加入队列">${icon('queueAdd')}</button>
-       <button type="button" class="row-action ripple" data-row-playlist="${index}" aria-label="加入歌单">${icon('playlistAdd')}</button>`;
+    : `<button type="button" class="row-action ripple" data-row-queue="${index}" aria-label="加入队列" title="加入队列">${icon('queueAdd')}</button>
+       <button type="button" class="row-action ripple" data-row-playlist="${index}" aria-label="加入歌单" title="加入歌单">${icon('playlistAdd')}</button>`;
   return `<div class="song-row ripple ${active ? 'is-active' : ''}" role="button" tabindex="0" data-row-index="${index}">
     ${coverMarkup(song, 'small')}
     <span class="song-copy">
@@ -355,8 +355,8 @@ export function renderLibrary() {
   else if (state.libraryTab === 'artists') body = renderGroupTab('artist', '未知歌手');
   else body = renderPlaylistsTab();
   root.innerHTML = `<div class="section-heading"><h3>音乐库</h3><div class="heading-actions">
-      <button type="button" class="text-button" id="library-import">${icon('add', 'button-icon')}导入</button>
-      <button type="button" class="text-button" id="library-folder">${icon('folder', 'button-icon')}文件夹</button>
+      <button type="button" class="tonal-button ripple small" id="library-import">${icon('add', 'button-icon')}导入音乐</button>
+      <button type="button" class="tonal-button ripple small" id="library-folder">${icon('folder', 'button-icon')}导入文件夹</button>
     </div></div>
     <div class="filter-row">${tabs}</div>${body}`;
   qs('#library-import', root)?.addEventListener('click', () => void importAudioFiles());

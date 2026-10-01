@@ -18,7 +18,7 @@ export const iconNames = {
   repeat: 'repeat',
   repeatOne: 'repeat_one',
   list: 'list',
-  queueAdd: 'playlist_add',
+  queueAdd: 'add_to_queue',
   playlistAdd: 'playlist_add',
   minimize: 'minimize',
   maximize: 'crop_free',

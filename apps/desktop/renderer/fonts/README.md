@@ -2,7 +2,14 @@
 
 ## MiSans (UI text)
 
-MiSans is **not** freely redistributable. Place licensed files here as `MiSans-Regular.woff2` / `MiSans-Medium.woff2` / `MiSans-Semibold.woff2` / `MiSans-Bold.woff2` (or `.otf`). Missing files are ignored; the app falls back to system Chinese UI fonts.
+Official Xiaomi MiSans woff2 weights (free commercial use) are committed here:
+
+- `MiSans-Regular.woff2`
+- `MiSans-Medium.woff2`
+- `MiSans-Semibold.woff2`
+- `MiSans-Bold.woff2`
+
+`styles.css` registers them via `@font-face`; `--app-font` / `DEFAULT_FONT_STACK` list MiSans first. When no font plugin is selected, settings show **MiSans** as the active font. Font plugins still override `--app-font` at runtime when applied.
 
 ## Material Symbols Rounded (icons)
 

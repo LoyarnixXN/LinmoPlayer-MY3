@@ -1685,7 +1685,7 @@
         repeat: "repeat",
         repeatOne: "repeat_one",
         list: "list",
-        queueAdd: "playlist_add",
+        queueAdd: "add_to_queue",
         playlistAdd: "playlist_add",
         minimize: "minimize",
         maximize: "crop_free",
@@ -2759,8 +2759,8 @@
     const active = state.currentSong?.key === song.key;
     const badge = song.mediaUri ? "\u672C\u5730" : sourceName(song.pluginId);
     const duration = song.durationMs ? formatTime(song.durationMs / 1e3) : "";
-    const actions = options.removable ? `<button type="button" class="row-action ripple" data-row-remove="${index}" aria-label="\u4ECE\u6B4C\u5355\u79FB\u9664">${icon("delete")}</button>` : `<button type="button" class="row-action ripple" data-row-queue="${index}" aria-label="\u52A0\u5165\u961F\u5217">${icon("queueAdd")}</button>
-       <button type="button" class="row-action ripple" data-row-playlist="${index}" aria-label="\u52A0\u5165\u6B4C\u5355">${icon("playlistAdd")}</button>`;
+    const actions = options.removable ? `<button type="button" class="row-action ripple" data-row-remove="${index}" aria-label="\u4ECE\u6B4C\u5355\u79FB\u9664">${icon("delete")}</button>` : `<button type="button" class="row-action ripple" data-row-queue="${index}" aria-label="\u52A0\u5165\u961F\u5217" title="\u52A0\u5165\u961F\u5217">${icon("queueAdd")}</button>
+       <button type="button" class="row-action ripple" data-row-playlist="${index}" aria-label="\u52A0\u5165\u6B4C\u5355" title="\u52A0\u5165\u6B4C\u5355">${icon("playlistAdd")}</button>`;
     return `<div class="song-row ripple ${active ? "is-active" : ""}" role="button" tabindex="0" data-row-index="${index}">
     ${coverMarkup(song, "small")}
     <span class="song-copy">
@@ -3004,8 +3004,8 @@
     else if (state.libraryTab === "artists") body = renderGroupTab("artist", "\u672A\u77E5\u6B4C\u624B");
     else body = renderPlaylistsTab();
     root.innerHTML = `<div class="section-heading"><h3>\u97F3\u4E50\u5E93</h3><div class="heading-actions">
-      <button type="button" class="text-button" id="library-import">${icon("add", "button-icon")}\u5BFC\u5165</button>
-      <button type="button" class="text-button" id="library-folder">${icon("folder", "button-icon")}\u6587\u4EF6\u5939</button>
+      <button type="button" class="tonal-button ripple small" id="library-import">${icon("add", "button-icon")}\u5BFC\u5165\u97F3\u4E50</button>
+      <button type="button" class="tonal-button ripple small" id="library-folder">${icon("folder", "button-icon")}\u5BFC\u5165\u6587\u4EF6\u5939</button>
     </div></div>
     <div class="filter-row">${tabs}</div>${body}`;
     qs("#library-import", root)?.addEventListener("click", () => void importAudioFiles());
@@ -3608,7 +3608,7 @@
       )
     ].join("");
     const fontOptions = [
-      `<option value="" ${settings.fontId ? "" : "selected"}>\u7CFB\u7EDF\u9ED8\u8BA4</option>`,
+      `<option value="" ${settings.fontId ? "" : "selected"}>MiSans</option>`,
       ...state.plugins.filter((plugin) => plugin.kind === "font").map(
         (plugin) => `<option value="${escapeHtml(plugin.id)}" ${settings.fontId === plugin.id ? "selected" : ""}>${escapeHtml(plugin.font?.displayName ?? plugin.name)}</option>`
       )

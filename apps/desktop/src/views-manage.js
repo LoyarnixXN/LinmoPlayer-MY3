@@ -339,7 +339,7 @@ export function renderSettings() {
       ),
   ].join('');
   const fontOptions = [
-    `<option value="" ${settings.fontId ? '' : 'selected'}>系统默认</option>`,
+    `<option value="" ${settings.fontId ? '' : 'selected'}>MiSans</option>`,
     ...state.plugins
       .filter((plugin) => plugin.kind === 'font')
       .map(
