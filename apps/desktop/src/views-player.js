@@ -1,16 +1,13 @@
-/** Mini player bar (Apple Music-like), Now Playing overlay, lyrics and queue tabs. */
+/** Mini player bar and Now Playing overlay (core transport only; lyrics/queue UI deferred). */
 
 import { state, subscribe } from './state.js';
 import { player } from './player.js';
 import { fetchCover } from './core-bridge.js';
 import { icon } from './icons.js';
-import { qs, qsa, escapeHtml, coverMarkup, formatTime } from './ui.js';
-import { activeLineIndex } from './lrc.js';
+import { qs, escapeHtml, coverMarkup, formatTime } from './ui.js';
 
 let miniDragging = false;
 let npDragging = false;
-let activeLyricIndex = -2;
-let lyricsHoldUntil = 0;
 
 function modeIcon() {
   return player.modeMeta().icon;
@@ -51,9 +48,6 @@ export function renderMiniPlayer() {
     </div>
     <div class="mini-extra">
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="音量" />
-      <button type="button" class="player-control ripple" data-mini-action="lyrics" aria-label="歌词" title="歌词">${icon('lyrics')}</button>
-      <button type="button" class="player-control ripple" data-mini-action="queue" aria-label="播放队列" title="播放队列">${icon('queue')}</button>
-      <button type="button" class="player-control ripple" data-mini-action="more" aria-label="更多" title="更多">${icon('more')}</button>
     </div>`;
   root
     .querySelector('[data-mini-action="toggle"]')
@@ -68,15 +62,6 @@ export function renderMiniPlayer() {
   root
     .querySelector('[data-mini-action="mute"]')
     ?.addEventListener('click', () => player.toggleMute());
-  root
-    .querySelector('[data-mini-action="lyrics"]')
-    ?.addEventListener('click', () => openNowPlaying('lyrics'));
-  root
-    .querySelector('[data-mini-action="queue"]')
-    ?.addEventListener('click', () => openNowPlaying('queue'));
-  root
-    .querySelector('[data-mini-action="more"]')
-    ?.addEventListener('click', () => openNowPlaying('lyrics'));
   const info = qs('#mini-open', root);
   info?.addEventListener('click', () => {
     if (!song) return;
@@ -98,11 +83,6 @@ export function renderMiniPlayer() {
   const volume = qs('.volume-slider', root);
   volume?.addEventListener('input', (event) => player.setVolume(Number(event.target.value) / 100));
   updateProgressUI();
-}
-
-function openNowPlaying(tab) {
-  setNowPlayingOpen(true);
-  switchNpTab(tab);
 }
 
 export function setNowPlayingOpen(open) {
@@ -155,8 +135,6 @@ export function renderNowPlaying() {
     viaNode.hidden = true;
   }
   renderNpControls();
-  renderLyricsTab();
-  renderQueueTab();
 }
 
 function renderNpControls() {
@@ -193,69 +171,6 @@ function renderNpControls() {
     volume.value = String(Math.round((muted ? 0 : player.audio.volume) * 100));
 }
 
-export function renderLyricsTab() {
-  const container = qs('#np-lyrics');
-  if (!container) return;
-  const lyrics = state.lyrics;
-  activeLyricIndex = -2;
-  if (!state.currentSong || state.currentSong.mediaUri) {
-    container.innerHTML = `<div class="lyrics-empty">本地歌曲暂无歌词服务。</div>`;
-    return;
-  }
-  if (!lyrics || lyrics.songKey !== state.currentSong.key) {
-    container.innerHTML = `<div class="lyrics-empty">歌词尚未加载。</div>`;
-    return;
-  }
-  if (lyrics.loading) {
-    container.innerHTML = `<div class="lyrics-empty"><span class="spinner"></span>正在获取歌词…</div>`;
-    return;
-  }
-  if (lyrics.error || (!lyrics.lines.length && !lyrics.plain)) {
-    container.innerHTML = `<div class="lyrics-empty">${escapeHtml(lyrics.error || '这首歌曲暂时没有歌词。')}</div>`;
-    return;
-  }
-  if (lyrics.synced) {
-    const translated = new Map(lyrics.translatedLines.map((line) => [line.timeMs, line.text]));
-    container.innerHTML = lyrics.lines
-      .map(
-        (line, index) =>
-          `<div class="lyrics-line" data-line="${index}"><span>${escapeHtml(line.text || '· · ·')}</span>${
-            translated.has(line.timeMs)
-              ? `<small>${escapeHtml(translated.get(line.timeMs))}</small>`
-              : ''
-          }</div>`,
-      )
-      .join('');
-  } else {
-    container.innerHTML = `<div class="lyrics-plain">${escapeHtml(lyrics.plain)}${
-      lyrics.translatedPlain ? `\n\n—— 翻译 ——\n${escapeHtml(lyrics.translatedPlain)}` : ''
-    }</div>`;
-  }
-}
-
-export function renderQueueTab() {
-  const container = qs('#np-queue');
-  if (!container) return;
-  if (!state.queue.length) {
-    container.innerHTML = `<div class="lyrics-empty">播放队列为空。</div>`;
-    return;
-  }
-  container.innerHTML = state.queue
-    .map(
-      (song, index) =>
-        `<button type="button" class="queue-row ${index === state.queueIndex ? 'is-active' : ''}" data-queue-index="${index}">
-          <span class="queue-index">${index === state.queueIndex ? icon('play', 'row-icon') : index + 1}</span>
-          <span class="queue-copy"><strong>${escapeHtml(song.title)}</strong><small>${escapeHtml(song.artist)}</small></span>
-        </button>`,
-    )
-    .join('');
-  container
-    .querySelectorAll('[data-queue-index]')
-    .forEach((row) =>
-      row.addEventListener('click', () => player.playSongAt(Number(row.dataset.queueIndex))),
-    );
-}
-
 export function updateProgressUI() {
   const audio = player.audio;
   const fraction =
@@ -280,28 +195,6 @@ export function updateProgressUI() {
   if (npCurrent) npCurrent.textContent = formatTime(audio.currentTime);
   if (npDuration)
     npDuration.textContent = Number.isFinite(audio.duration) ? formatTime(audio.duration) : '0:00';
-}
-
-/** Scroll only inside the lyrics container — never jump the Now Playing page. */
-function scrollLyricsToActive(container, node) {
-  const target =
-    node.offsetTop - container.clientHeight / 2 + node.offsetHeight / 2 - container.scrollTop;
-  container.scrollBy({ top: target, behavior: 'smooth' });
-}
-
-function updateLyricsHighlight() {
-  if (!state.nowPlayingOpen) return;
-  const lyrics = state.lyrics;
-  const container = qs('#np-lyrics');
-  if (!lyrics?.synced || !container) return;
-  const index = activeLineIndex(lyrics.lines, player.audio.currentTime * 1000);
-  if (index === activeLyricIndex) return;
-  activeLyricIndex = index;
-  qsa('.lyrics-line', container).forEach((node) => {
-    const isActive = Number(node.dataset.line) === index;
-    node.classList.toggle('is-active', isActive);
-    if (isActive && Date.now() > lyricsHoldUntil) scrollLyricsToActive(container, node);
-  });
 }
 
 export function initPlayerView() {
@@ -332,48 +225,12 @@ export function initPlayerView() {
     player.setVolume(Number(event.target.value) / 100);
     renderNpControls();
   });
-  qs('#np-tab-lyrics', overlay)?.addEventListener('click', () => switchNpTab('lyrics'));
-  qs('#np-tab-queue', overlay)?.addEventListener('click', () => switchNpTab('queue'));
-  const lyricsContainer = qs('#np-lyrics', overlay);
-  lyricsContainer?.addEventListener(
-    'wheel',
-    (event) => {
-      lyricsHoldUntil = Date.now() + 4000;
-      // Contain wheel scrolling inside lyrics even at the container edges.
-      const { scrollTop, scrollHeight, clientHeight } = lyricsContainer;
-      const atTop = scrollTop <= 0 && event.deltaY < 0;
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && event.deltaY > 0;
-      if (atTop || atBottom) event.preventDefault();
-    },
-    { passive: false },
-  );
-  lyricsContainer?.addEventListener('click', (event) => {
-    const line = event.target instanceof Element ? event.target.closest('[data-line]') : null;
-    if (!line || !state.lyrics?.synced) return;
-    const timeMs = state.lyrics.lines[Number(line.dataset.line)]?.timeMs;
-    if (timeMs !== undefined)
-      player.seekFraction(timeMs / 1000 / Math.max(player.audio.duration, 0.001));
-  });
   subscribe('player', () => {
     renderMiniPlayer();
     if (state.nowPlayingOpen) renderNowPlaying();
   });
   subscribe('player-time', () => {
     updateProgressUI();
-    updateLyricsHighlight();
   });
-  subscribe('lyrics', renderLyricsTab);
-  subscribe('queue', renderQueueTab);
   subscribe('theme', () => renderMiniPlayer());
-}
-
-function switchNpTab(tab) {
-  const overlay = qs('#now-playing');
-  if (!overlay) return;
-  qs('#np-tab-lyrics', overlay)?.classList.toggle('is-selected', tab === 'lyrics');
-  qs('#np-tab-queue', overlay)?.classList.toggle('is-selected', tab === 'queue');
-  qs('#np-tab-lyrics', overlay)?.setAttribute('aria-selected', String(tab === 'lyrics'));
-  qs('#np-tab-queue', overlay)?.setAttribute('aria-selected', String(tab === 'queue'));
-  qs('#np-lyrics', overlay)?.classList.toggle('is-selected', tab === 'lyrics');
-  qs('#np-queue', overlay)?.classList.toggle('is-selected', tab === 'queue');
 }

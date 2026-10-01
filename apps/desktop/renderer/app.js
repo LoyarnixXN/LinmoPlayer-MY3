@@ -2036,14 +2036,6 @@
     lines.sort((a, b) => a.timeMs - b.timeMs);
     return lines;
   }
-  function activeLineIndex(lines, timeMs) {
-    let index = -1;
-    for (let cursor = 0; cursor < lines.length; cursor += 1) {
-      if (lines[cursor].timeMs <= timeMs + 120) index = cursor;
-      else break;
-    }
-    return index;
-  }
   function isLrc(text) {
     TIME_TAG.lastIndex = 0;
     return TIME_TAG.test(String(text ?? ""));
@@ -3726,11 +3718,8 @@
   init_core_bridge();
   init_icons();
   init_ui();
-  init_lrc();
   var miniDragging = false;
   var npDragging = false;
-  var activeLyricIndex = -2;
-  var lyricsHoldUntil = 0;
   function modeIcon() {
     return player.modeMeta().icon;
   }
@@ -3768,18 +3757,12 @@
     </div>
     <div class="mini-extra">
       <input class="m3-slider volume-slider" type="range" min="0" max="100" step="1" value="${Math.round((muted ? 0 : player.audio.volume) * 100)}" aria-label="\u97F3\u91CF" />
-      <button type="button" class="player-control ripple" data-mini-action="lyrics" aria-label="\u6B4C\u8BCD" title="\u6B4C\u8BCD">${icon("lyrics")}</button>
-      <button type="button" class="player-control ripple" data-mini-action="queue" aria-label="\u64AD\u653E\u961F\u5217" title="\u64AD\u653E\u961F\u5217">${icon("queue")}</button>
-      <button type="button" class="player-control ripple" data-mini-action="more" aria-label="\u66F4\u591A" title="\u66F4\u591A">${icon("more")}</button>
     </div>`;
     root.querySelector('[data-mini-action="toggle"]')?.addEventListener("click", () => void player.toggle());
     root.querySelector('[data-mini-action="mode"]')?.addEventListener("click", () => player.cycleMode());
     root.querySelector('[data-mini-action="previous"]')?.addEventListener("click", () => player.previous());
     root.querySelector('[data-mini-action="next"]')?.addEventListener("click", () => player.next());
     root.querySelector('[data-mini-action="mute"]')?.addEventListener("click", () => player.toggleMute());
-    root.querySelector('[data-mini-action="lyrics"]')?.addEventListener("click", () => openNowPlaying("lyrics"));
-    root.querySelector('[data-mini-action="queue"]')?.addEventListener("click", () => openNowPlaying("queue"));
-    root.querySelector('[data-mini-action="more"]')?.addEventListener("click", () => openNowPlaying("lyrics"));
     const info = qs("#mini-open", root);
     info?.addEventListener("click", () => {
       if (!song) return;
@@ -3802,10 +3785,6 @@
     const volume = qs(".volume-slider", root);
     volume?.addEventListener("input", (event) => player.setVolume(Number(event.target.value) / 100));
     updateProgressUI();
-  }
-  function openNowPlaying(tab) {
-    setNowPlayingOpen(true);
-    switchNpTab(tab);
   }
   function setNowPlayingOpen(open) {
     state.nowPlayingOpen = open;
@@ -3854,8 +3833,6 @@
       viaNode.hidden = true;
     }
     renderNpControls();
-    renderLyricsTab();
-    renderQueueTab();
   }
   function renderNpControls() {
     const overlay = qs("#now-playing");
@@ -3890,56 +3867,6 @@
     if (volume && document.activeElement !== volume)
       volume.value = String(Math.round((muted ? 0 : player.audio.volume) * 100));
   }
-  function renderLyricsTab() {
-    const container = qs("#np-lyrics");
-    if (!container) return;
-    const lyrics = state.lyrics;
-    activeLyricIndex = -2;
-    if (!state.currentSong || state.currentSong.mediaUri) {
-      container.innerHTML = `<div class="lyrics-empty">\u672C\u5730\u6B4C\u66F2\u6682\u65E0\u6B4C\u8BCD\u670D\u52A1\u3002</div>`;
-      return;
-    }
-    if (!lyrics || lyrics.songKey !== state.currentSong.key) {
-      container.innerHTML = `<div class="lyrics-empty">\u6B4C\u8BCD\u5C1A\u672A\u52A0\u8F7D\u3002</div>`;
-      return;
-    }
-    if (lyrics.loading) {
-      container.innerHTML = `<div class="lyrics-empty"><span class="spinner"></span>\u6B63\u5728\u83B7\u53D6\u6B4C\u8BCD\u2026</div>`;
-      return;
-    }
-    if (lyrics.error || !lyrics.lines.length && !lyrics.plain) {
-      container.innerHTML = `<div class="lyrics-empty">${escapeHtml(lyrics.error || "\u8FD9\u9996\u6B4C\u66F2\u6682\u65F6\u6CA1\u6709\u6B4C\u8BCD\u3002")}</div>`;
-      return;
-    }
-    if (lyrics.synced) {
-      const translated = new Map(lyrics.translatedLines.map((line) => [line.timeMs, line.text]));
-      container.innerHTML = lyrics.lines.map(
-        (line, index) => `<div class="lyrics-line" data-line="${index}"><span>${escapeHtml(line.text || "\xB7 \xB7 \xB7")}</span>${translated.has(line.timeMs) ? `<small>${escapeHtml(translated.get(line.timeMs))}</small>` : ""}</div>`
-      ).join("");
-    } else {
-      container.innerHTML = `<div class="lyrics-plain">${escapeHtml(lyrics.plain)}${lyrics.translatedPlain ? `
-
-\u2014\u2014 \u7FFB\u8BD1 \u2014\u2014
-${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
-    }
-  }
-  function renderQueueTab() {
-    const container = qs("#np-queue");
-    if (!container) return;
-    if (!state.queue.length) {
-      container.innerHTML = `<div class="lyrics-empty">\u64AD\u653E\u961F\u5217\u4E3A\u7A7A\u3002</div>`;
-      return;
-    }
-    container.innerHTML = state.queue.map(
-      (song, index) => `<button type="button" class="queue-row ${index === state.queueIndex ? "is-active" : ""}" data-queue-index="${index}">
-          <span class="queue-index">${index === state.queueIndex ? icon("play", "row-icon") : index + 1}</span>
-          <span class="queue-copy"><strong>${escapeHtml(song.title)}</strong><small>${escapeHtml(song.artist)}</small></span>
-        </button>`
-    ).join("");
-    container.querySelectorAll("[data-queue-index]").forEach(
-      (row) => row.addEventListener("click", () => player.playSongAt(Number(row.dataset.queueIndex)))
-    );
-  }
   function updateProgressUI() {
     const audio2 = player.audio;
     const fraction = Number.isFinite(audio2.duration) && audio2.duration > 0 ? audio2.currentTime / audio2.duration : 0;
@@ -3961,24 +3888,6 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
     if (npCurrent) npCurrent.textContent = formatTime(audio2.currentTime);
     if (npDuration)
       npDuration.textContent = Number.isFinite(audio2.duration) ? formatTime(audio2.duration) : "0:00";
-  }
-  function scrollLyricsToActive(container, node) {
-    const target = node.offsetTop - container.clientHeight / 2 + node.offsetHeight / 2 - container.scrollTop;
-    container.scrollBy({ top: target, behavior: "smooth" });
-  }
-  function updateLyricsHighlight() {
-    if (!state.nowPlayingOpen) return;
-    const lyrics = state.lyrics;
-    const container = qs("#np-lyrics");
-    if (!lyrics?.synced || !container) return;
-    const index = activeLineIndex(lyrics.lines, player.audio.currentTime * 1e3);
-    if (index === activeLyricIndex) return;
-    activeLyricIndex = index;
-    qsa(".lyrics-line", container).forEach((node) => {
-      const isActive = Number(node.dataset.line) === index;
-      node.classList.toggle("is-active", isActive);
-      if (isActive && Date.now() > lyricsHoldUntil) scrollLyricsToActive(container, node);
-    });
   }
   function initPlayerView() {
     const overlay = qs("#now-playing");
@@ -4009,48 +3918,14 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
       player.setVolume(Number(event.target.value) / 100);
       renderNpControls();
     });
-    qs("#np-tab-lyrics", overlay)?.addEventListener("click", () => switchNpTab("lyrics"));
-    qs("#np-tab-queue", overlay)?.addEventListener("click", () => switchNpTab("queue"));
-    const lyricsContainer = qs("#np-lyrics", overlay);
-    lyricsContainer?.addEventListener(
-      "wheel",
-      (event) => {
-        lyricsHoldUntil = Date.now() + 4e3;
-        const { scrollTop, scrollHeight, clientHeight } = lyricsContainer;
-        const atTop = scrollTop <= 0 && event.deltaY < 0;
-        const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && event.deltaY > 0;
-        if (atTop || atBottom) event.preventDefault();
-      },
-      { passive: false }
-    );
-    lyricsContainer?.addEventListener("click", (event) => {
-      const line = event.target instanceof Element ? event.target.closest("[data-line]") : null;
-      if (!line || !state.lyrics?.synced) return;
-      const timeMs = state.lyrics.lines[Number(line.dataset.line)]?.timeMs;
-      if (timeMs !== void 0)
-        player.seekFraction(timeMs / 1e3 / Math.max(player.audio.duration, 1e-3));
-    });
     subscribe("player", () => {
       renderMiniPlayer();
       if (state.nowPlayingOpen) renderNowPlaying();
     });
     subscribe("player-time", () => {
       updateProgressUI();
-      updateLyricsHighlight();
     });
-    subscribe("lyrics", renderLyricsTab);
-    subscribe("queue", renderQueueTab);
     subscribe("theme", () => renderMiniPlayer());
-  }
-  function switchNpTab(tab) {
-    const overlay = qs("#now-playing");
-    if (!overlay) return;
-    qs("#np-tab-lyrics", overlay)?.classList.toggle("is-selected", tab === "lyrics");
-    qs("#np-tab-queue", overlay)?.classList.toggle("is-selected", tab === "queue");
-    qs("#np-tab-lyrics", overlay)?.setAttribute("aria-selected", String(tab === "lyrics"));
-    qs("#np-tab-queue", overlay)?.setAttribute("aria-selected", String(tab === "queue"));
-    qs("#np-lyrics", overlay)?.classList.toggle("is-selected", tab === "lyrics");
-    qs("#np-queue", overlay)?.classList.toggle("is-selected", tab === "queue");
   }
 
   // src/app.js
