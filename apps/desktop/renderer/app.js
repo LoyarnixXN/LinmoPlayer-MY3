@@ -1153,6 +1153,41 @@
     if (!set) return;
     for (const handler of set) handler();
   }
+  function isLegacyBuiltinPlugin(plugin) {
+    if (!plugin || typeof plugin !== "object") return true;
+    if (plugin.builtin === true) return true;
+    const id = String(plugin.id ?? "");
+    if (LEGACY_BUILTIN_PLUGIN_IDS.has(id)) return true;
+    if (id.startsWith("linmo.") && plugin.provider === "netease-api") return true;
+    return false;
+  }
+  function loadPlugins() {
+    const raw = load("plugins", []);
+    const list = Array.isArray(raw) ? raw : [];
+    const cleaned = list.filter((plugin) => !isLegacyBuiltinPlugin(plugin));
+    if (cleaned.length !== list.length) {
+      for (const plugin of list) {
+        if (isLegacyBuiltinPlugin(plugin) && plugin && plugin.id) {
+          purgePluginStorageKey(String(plugin.id));
+        }
+      }
+      save("plugins", cleaned);
+      purgeLegacyPluginStorage();
+    }
+    return cleaned;
+  }
+  function purgePluginStorageKey(pluginId) {
+    const prefix = `linmo.pluginStorage.${pluginId}.`;
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(prefix)) localStorage.removeItem(key);
+    }
+  }
+  function purgeLegacyPluginStorage() {
+    for (const id of LEGACY_BUILTIN_PLUGIN_IDS) purgePluginStorageKey(id);
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("linmo.pluginStorage.linmo.")) localStorage.removeItem(key);
+    }
+  }
   function patchSettings(patch) {
     Object.assign(state.settings, patch);
     persisters.preferences();
@@ -1171,7 +1206,7 @@
       (plugin) => plugin.enabled && plugin.kind === "music-source" && plugin.capabilities.includes("account")
     ) ?? null;
   }
-  var PREFIX, listeners, PLAYBACK_MODES, QUALITIES, state, playbackMemory, persisters;
+  var PREFIX, listeners, PLAYBACK_MODES, QUALITIES, state, playbackMemory, LEGACY_BUILTIN_PLUGIN_IDS, persisters;
   var init_state = __esm({
     "src/state.js"() {
       PREFIX = "linmo.";
@@ -1191,7 +1226,7 @@
         playlists: load("playlists", []).filter((playlist) => Array.isArray(playlist?.songs)),
         remotePlaylists: load("remote-playlists", []),
         recents: load("recents", []),
-        plugins: load("plugins", []),
+        plugins: loadPlugins(),
         searchResults: [],
         searchFailures: [],
         searchQuery: "",
@@ -1233,6 +1268,7 @@
       if (!PLAYBACK_MODES.includes(state.settings.playbackMode)) state.settings.playbackMode = "sequence";
       if (!QUALITIES.some(([id]) => id === state.settings.quality)) state.settings.quality = "higher";
       playbackMemory = load("playback-memory", {});
+      LEGACY_BUILTIN_PLUGIN_IDS = /* @__PURE__ */ new Set(["linmo.netease"]);
       persisters = {
         library: () => save("library", state.songs),
         playlists: () => save("playlists", state.playlists),
@@ -1258,6 +1294,7 @@
     fetchLyrics: () => fetchLyrics,
     fetchRecommendations: () => fetchRecommendations,
     localMediaUrl: () => localMediaUrl,
+    migrateLegacyBuiltinPlugins: () => migrateLegacyBuiltinPlugins,
     qrLoginCheck: () => qrLoginCheck,
     qrLoginStart: () => qrLoginStart,
     refreshAccount: () => refreshAccount,
@@ -1376,6 +1413,36 @@
       if (meta.enabled && meta.kind === "music-source") await startPlugin(meta);
     }
     publish("plugins");
+  }
+  async function migrateLegacyBuiltinPlugins() {
+    const legacyIds = [];
+    const before = state.plugins.length;
+    state.plugins = state.plugins.filter((plugin) => {
+      if (!isLegacyBuiltinPlugin(plugin)) return true;
+      if (plugin?.id) legacyIds.push(String(plugin.id));
+      return false;
+    });
+    purgeLegacyPluginStorage();
+    for (const id of legacyIds) {
+      const prefix = `linmo.pluginStorage.${id}.`;
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith(prefix)) localStorage.removeItem(key);
+      }
+    }
+    if (state.accountPluginId && isLegacyBuiltinPlugin({ id: state.accountPluginId })) {
+      state.accountPluginId = null;
+    }
+    if (state.plugins.length !== before) {
+      persisters.plugins();
+      publish("plugins");
+    }
+    const diskIds = /* @__PURE__ */ new Set([...legacyIds, "linmo.netease"]);
+    for (const id of diskIds) {
+      try {
+        await window.linmoDesktop?.plugins?.uninstall?.(id);
+      } catch {
+      }
+    }
   }
   async function uninstallPlugin(pluginId) {
     await disablePlugin(pluginId);
@@ -1604,8 +1671,9 @@
         search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
         library: '<path d="M5 4.5v15"/><path d="M9 5.5a2 2 0 0 1 2-2h7.5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H11a2 2 0 0 0-2 2"/><path d="M9.5 18.5h10"/>',
         plugins: '<path d="m12 2.8 2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5Z"/>',
-        settings: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3.2v2.2M12 18.6v2.2M20.8 12h-2.2M5.4 12H3.2M18.2 5.8l-1.6 1.6M7.4 16.6l-1.6 1.6M18.2 18.2l-1.6-1.6M7.4 7.4 5.8 5.8"/>',
-        music: '<path d="M9 18.5V5.5l10-2.2v13"/><circle cx="6.5" cy="18.5" r="2.8"/><circle cx="16.5" cy="16.3" r="2.8"/>',
+        settings: '<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2.1-1.6-2-3.4-2.5 1a7.7 7.7 0 0 0-2.6-1.5L14 2h-4l-.4 2.9a7.7 7.7 0 0 0-2.6 1.5l-2.5-1-2 3.4L4.6 10.5a7.6 7.6 0 0 0 0 3l-2.1 1.6 2 3.4 2.5-1a7.7 7.7 0 0 0 2.6 1.5L10 22h4l.4-2.9a7.7 7.7 0 0 0 2.6-1.5l2.5 1 2-3.4-2.1-1.6Z"/>',
+        music: '<path d="M9 18V6l12-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+        musicNote: '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>',
         play: '<path d="M8.2 5.2a.8.8 0 0 1 1.22-.68l10.4 6.8a.8.8 0 0 1 0 1.34l-10.4 6.8a.8.8 0 0 1-1.22-.68Z" fill="currentColor" stroke="none"/>',
         pause: '<path d="M7.5 5.5v13M16.5 5.5v13"/>',
         previous: '<path d="M16.5 6.5 10 12l6.5 5.5Z" fill="currentColor" stroke="none"/><path d="M7 6v12"/>',
@@ -1692,7 +1760,7 @@
   function coverMarkup(song, size = "") {
     const url = song?.coverUrl;
     const classes = `cover ${size}`.trim();
-    const glyph = icon("music");
+    const glyph = icon("musicNote");
     if (url)
       return `<span class="${classes} cover-image"><span class="cover-glyph">${glyph}</span><img src="${escapeHtml(
         url
@@ -2869,7 +2937,15 @@
       )}</span></div>`
     ).join("")}</div>` : "";
     const recommendations = state.recommendations.length ? `<div class="section-heading"><h3>\u6BCF\u65E5\u63A8\u8350</h3><span class="muted">\u6765\u81EA\u8D26\u53F7\u97F3\u6E90</span></div><div class="song-list" id="home-recommend-list">${state.recommendations.slice(0, 10).map((song, index) => songRow(song, state.recommendations, index)).join("")}</div>` : "";
-    const library = state.songs.length ? `<div class="section-heading"><h3>\u672C\u5730\u97F3\u4E50</h3><button type="button" class="text-button" data-nav-library>\u67E5\u770B\u5168\u90E8</button></div><div class="song-list" id="home-local-list">${state.songs.slice(0, 6).map((song, index) => songRow(song, state.songs, index)).join("")}</div>` : `<div class="empty-state">${icon("music", "empty-icon")}<h2>\u5F00\u59CB\u4F7F\u7528 Linmo Player</h2><p>\u5BFC\u5165\u672C\u5730\u97F3\u9891\u6587\u4EF6\uFF0C\u6216\u542F\u7528\u97F3\u6E90\u63D2\u4EF6\u540E\u5728\u7EBF\u641C\u7D22\u64AD\u653E\u3002</p></div>`;
+    const library = state.songs.length ? `<div class="section-heading"><h3>\u672C\u5730\u97F3\u4E50</h3><button type="button" class="text-button" data-nav-library>\u67E5\u770B\u5168\u90E8</button></div><div class="song-list" id="home-local-list">${state.songs.slice(0, 6).map((song, index) => songRow(song, state.songs, index)).join("")}</div>` : `<div class="empty-state home-empty">
+        ${icon("musicNote", "empty-icon")}
+        <h2>\u5F00\u59CB\u4F7F\u7528 Linmo Player</h2>
+        <p>\u5BFC\u5165\u672C\u5730\u97F3\u9891\u6587\u4EF6\uFF0C\u6216\u542F\u7528\u97F3\u6E90\u63D2\u4EF6\u540E\u5728\u7EBF\u641C\u7D22\u64AD\u653E\u3002</p>
+        <div class="quick-actions empty-actions">
+          <button type="button" class="tonal-button ripple" id="home-empty-import">${icon("add", "button-icon")}\u5BFC\u5165\u97F3\u4E50</button>
+          <button type="button" class="tonal-button ripple" id="home-empty-folder">${icon("folder", "button-icon")}\u5BFC\u5165\u6587\u4EF6\u5939</button>
+        </div>
+      </div>`;
     root.innerHTML = `<div class="hero">
       <div class="hero-copy">
         <div class="eyebrow">LINMO PLAYER</div>
@@ -2882,6 +2958,8 @@
     ${recents}${recommendations}${library}`;
     qs("#home-import", root)?.addEventListener("click", () => void importAudioFiles());
     qs("#home-folder", root)?.addEventListener("click", () => void importAudioFolder());
+    qs("#home-empty-import", root)?.addEventListener("click", () => void importAudioFiles());
+    qs("#home-empty-folder", root)?.addEventListener("click", () => void importAudioFolder());
     qs("#home-shuffle", root)?.addEventListener("click", () => {
       if (!state.songs.length) return;
       const shuffled = [...state.songs].sort(() => Math.random() - 0.5);
@@ -2947,7 +3025,7 @@
   }
   function renderSongsTab() {
     if (!state.songs.length)
-      return `<div class="empty-state">${icon("music", "empty-icon")}<h2>\u97F3\u4E50\u5E93\u8FD8\u662F\u7A7A\u7684</h2><p>\u5BFC\u5165\u672C\u5730\u97F3\u9891\u6587\u4EF6\u540E\u5C06\u5728\u6B64\u663E\u793A\uFF0C\u652F\u6301 MP3\u3001FLAC\u3001M4A \u7B49\u683C\u5F0F\u3002</p></div>`;
+      return `<div class="empty-state">${icon("musicNote", "empty-icon")}<h2>\u97F3\u4E50\u5E93\u8FD8\u662F\u7A7A\u7684</h2><p>\u5BFC\u5165\u672C\u5730\u97F3\u9891\u6587\u4EF6\u540E\u5C06\u5728\u6B64\u663E\u793A\uFF0C\u652F\u6301 MP3\u3001FLAC\u3001M4A \u7B49\u683C\u5F0F\u3002</p></div>`;
     const formats = [...new Set(state.songs.map((song) => song.format).filter(Boolean))].join(" \xB7 ");
     return `<div class="library-stats"><div class="library-stat"><strong>${state.songs.length}</strong><span>\u66F2\u76EE</span></div><div class="library-stat"><strong>${formats || "\u2014"}</strong><span>\u683C\u5F0F</span></div></div><div class="song-list">${state.songs.map((song, index) => songRow(song, state.songs, index)).join("")}</div>`;
   }
@@ -3692,8 +3770,7 @@
       <button type="button" class="player-control ripple" data-mini-action="lyrics" aria-label="\u6B4C\u8BCD" title="\u6B4C\u8BCD">${icon("lyrics")}</button>
       <button type="button" class="player-control ripple" data-mini-action="queue" aria-label="\u64AD\u653E\u961F\u5217" title="\u64AD\u653E\u961F\u5217">${icon("queue")}</button>
       <button type="button" class="player-control ripple" data-mini-action="more" aria-label="\u66F4\u591A" title="\u66F4\u591A">${icon("more")}</button>
-    </div>
-    <div class="mini-progress-fill" aria-hidden="true"></div>`;
+    </div>`;
     root.querySelector('[data-mini-action="toggle"]')?.addEventListener("click", () => void player.toggle());
     root.querySelector('[data-mini-action="mode"]')?.addEventListener("click", () => player.cycleMode());
     root.querySelector('[data-mini-action="previous"]')?.addEventListener("click", () => player.previous());
@@ -4241,6 +4318,7 @@ ${escapeHtml(lyrics.translatedPlain)}` : ""}</div>`;
   async function boot() {
     installRipple();
     bindShell();
+    await migrateLegacyBuiltinPlugins();
     initPlayerView();
     renderMiniPlayer();
     renderAccount();

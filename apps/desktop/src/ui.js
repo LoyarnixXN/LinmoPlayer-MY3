@@ -28,7 +28,7 @@ export function formatTime(seconds) {
 export function coverMarkup(song, size = '') {
   const url = song?.coverUrl;
   const classes = `cover ${size}`.trim();
-  const glyph = icon('music');
+  const glyph = icon('musicNote');
   if (url)
     return `<span class="${classes} cover-image"><span class="cover-glyph">${glyph}</span><img src="${escapeHtml(
       url,

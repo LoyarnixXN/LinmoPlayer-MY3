@@ -7,7 +7,15 @@ import {
   createMusicSourcePlugin,
   missingPermissions,
 } from '../../../packages/core/src/index.ts';
-import { state, publish, installedPlugin, enabledAccountPlugin, persisters } from './state.js';
+import {
+  state,
+  publish,
+  installedPlugin,
+  enabledAccountPlugin,
+  persisters,
+  isLegacyBuiltinPlugin,
+  purgeLegacyPluginStorage,
+} from './state.js';
 
 export const registry = new PluginRegistry({
   info: (message, details) => console.info(`[linmo] ${message}`, details ?? ''),
@@ -133,6 +141,44 @@ export async function bootPlugins() {
     if (meta.enabled && meta.kind === 'music-source') await startPlugin(meta);
   }
   publish('plugins');
+}
+
+/**
+ * Upgrade migration: older builds seeded a built-in online source
+ * (linmo.netease / builtin: true) into localStorage and on disk.
+ * Running builds no longer seed it — wipe legacy records on every boot.
+ */
+export async function migrateLegacyBuiltinPlugins() {
+  const legacyIds = [];
+  const before = state.plugins.length;
+  state.plugins = state.plugins.filter((plugin) => {
+    if (!isLegacyBuiltinPlugin(plugin)) return true;
+    if (plugin?.id) legacyIds.push(String(plugin.id));
+    return false;
+  });
+  purgeLegacyPluginStorage();
+  for (const id of legacyIds) {
+    const prefix = `linmo.pluginStorage.${id}.`;
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(prefix)) localStorage.removeItem(key);
+    }
+  }
+  if (state.accountPluginId && isLegacyBuiltinPlugin({ id: state.accountPluginId })) {
+    state.accountPluginId = null;
+  }
+  if (state.plugins.length !== before) {
+    persisters.plugins();
+    publish('plugins');
+  }
+  // Best-effort disk cleanup for legacy plugin directories.
+  const diskIds = new Set([...legacyIds, 'linmo.netease']);
+  for (const id of diskIds) {
+    try {
+      await window.linmoDesktop?.plugins?.uninstall?.(id);
+    } catch {
+      /* directory may already be gone */
+    }
+  }
 }
 
 export async function uninstallPlugin(pluginId) {

@@ -565,7 +565,7 @@ h4 {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 28px 96px;
+  padding: 4px 28px 120px;
 }
 
 .page {
@@ -878,8 +878,8 @@ h4 {
   width: 44px;
   height: 44px;
   border-radius: var(--radius-s);
-  background: var(--m3-surface-container-high);
-  color: var(--m3-primary);
+  background: var(--m3-primary-container);
+  color: var(--m3-on-primary-container);
   overflow: hidden;
   position: relative;
 }
@@ -918,18 +918,19 @@ h4 {
   height: auto;
   aspect-ratio: 1;
   border-radius: var(--radius-l);
-  background: var(--m3-surface-container-high);
+  background: var(--m3-primary-container);
   box-shadow: 0 12px 32px color-mix(in srgb, var(--m3-scrim) 22%, transparent);
 }
 
 .cover.large .ui-icon {
-  width: 30%;
-  height: 30%;
+  width: 36%;
+  height: 36%;
 }
 
 .cover .ui-icon {
-  width: 40%;
-  height: 40%;
+  width: 48%;
+  height: 48%;
+  stroke-width: 1.8;
 }
 
 /* ---------------- song rows ---------------- */
@@ -1308,26 +1309,37 @@ h4 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   text-align: center;
-  padding: 56px 24px;
+  padding: 20px 24px 28px;
   color: var(--m3-on-surface-variant);
+}
+
+.empty-state.home-empty {
+  padding-top: 8px;
+  padding-bottom: 12px;
+}
+
+.empty-actions {
+  margin-top: 8px;
+  justify-content: center;
 }
 
 .empty-icon {
   display: grid;
   place-items: center;
-  width: 74px;
-  height: 74px;
+  width: 64px;
+  height: 64px;
   border-radius: 999px;
-  background: var(--m3-surface-container);
-  color: var(--m3-primary);
-  margin-bottom: 4px;
+  background: var(--m3-primary-container);
+  color: var(--m3-on-primary-container);
+  margin-bottom: 2px;
 }
 
 .empty-icon .ui-icon {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.8;
 }
 
 .empty-state h2 {
@@ -1912,14 +1924,14 @@ h4 {
   position: absolute;
   left: 16px;
   right: 16px;
-  bottom: 12px;
+  bottom: 20px;
   z-index: 20;
   display: grid;
-  grid-template-columns: minmax(160px, 1.1fr) minmax(280px, 1.6fr) minmax(160px, 1.1fr);
+  grid-template-columns: minmax(160px, 1.1fr) minmax(280px, 1.5fr) minmax(160px, 1.1fr);
   align-items: center;
   gap: 12px;
   height: 72px;
-  padding: 0 16px 10px;
+  padding: 0 16px;
   border-radius: 18px;
   background: color-mix(in srgb, var(--m3-surface-container-high) 78%, transparent);
   backdrop-filter: blur(28px) saturate(1.5);
@@ -1929,33 +1941,17 @@ h4 {
   overflow: hidden;
 }
 
-/* 底部清晰进度条（Apple Music 式） */
+/* 进度条视觉填充（已废弃，仅保留选择器避免旧节点残留） */
 .mini-progress-fill {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 4px;
-  height: 3px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--m3-on-surface) 12%, transparent);
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.mini-progress-fill::after {
-  content: '';
-  display: block;
-  height: 100%;
-  width: var(--progress, 0%);
-  border-radius: inherit;
-  background: var(--m3-primary);
-  transition: width 180ms linear;
+  display: none;
 }
 
 .mini-progress {
   flex: 1;
   min-width: 0;
-  height: 16px;
+  width: 100%;
+  height: 14px;
+  accent-color: var(--m3-primary);
 }
 
 .mini-info {
@@ -1995,7 +1991,7 @@ h4 {
   text-overflow: ellipsis;
 }
 
-/* 居中控制簇：模式 | 上一首 播放 下一首 静音 + 进度 */
+/* 居中控制簇：控制按钮在上，进度条紧贴其下且仅占中间区域 */
 .mini-transport {
   display: flex;
   flex-direction: column;
@@ -2003,13 +1999,20 @@ h4 {
   justify-content: center;
   gap: 2px;
   min-width: 0;
+  width: 100%;
+  max-width: 360px;
+  justify-self: center;
+  height: 100%;
 }
 
 .mini-progress-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  width: min(100%, 420px);
+  width: 100%;
+  max-width: 300px;
+  flex: 0 0 auto;
 }
 
 .mini-time {
@@ -2029,6 +2032,7 @@ h4 {
   align-items: center;
   justify-content: center;
   gap: 4px;
+  flex: 0 0 auto;
 }
 
 .mini-extra {
@@ -2049,7 +2053,7 @@ h4 {
   width: 40px;
   height: 40px;
   border-radius: 999px;
-  color: var(--m3-on-surface-variant);
+  color: var(--m3-on-surface);
   position: relative;
   overflow: hidden;
   transition:
@@ -2062,9 +2066,15 @@ h4 {
   color: var(--m3-on-surface);
 }
 
+.player-control:disabled {
+  opacity: 0.55;
+  color: var(--m3-on-surface-variant);
+}
+
 .player-control .ui-icon {
   width: 20px;
   height: 20px;
+  stroke-width: 1.9;
 }
 
 .player-control.is-active {
@@ -2075,8 +2085,8 @@ h4 {
 .play-button {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   border-radius: 999px;
   background: var(--m3-primary);
   color: var(--m3-on-primary);
@@ -2097,8 +2107,8 @@ h4 {
 }
 
 .play-button .player-icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .play-button.is-playing .player-icon {
@@ -2672,6 +2682,7 @@ html[data-mode='dark'] .snackbar {
   .mini-player {
     grid-template-columns: minmax(120px, 1fr) minmax(220px, 1.4fr) auto;
     height: 68px;
+    bottom: 16px;
   }
 
   .mini-extra .volume-slider {
@@ -2701,7 +2712,7 @@ html[data-mode='dark'] .snackbar {
   .mini-player {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
-    padding: 0 12px 10px;
+    padding: 0 12px;
   }
 
   .mini-transport .mini-progress-row {

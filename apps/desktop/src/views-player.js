@@ -54,8 +54,7 @@ export function renderMiniPlayer() {
       <button type="button" class="player-control ripple" data-mini-action="lyrics" aria-label="歌词" title="歌词">${icon('lyrics')}</button>
       <button type="button" class="player-control ripple" data-mini-action="queue" aria-label="播放队列" title="播放队列">${icon('queue')}</button>
       <button type="button" class="player-control ripple" data-mini-action="more" aria-label="更多" title="更多">${icon('more')}</button>
-    </div>
-    <div class="mini-progress-fill" aria-hidden="true"></div>`;
+    </div>`;
   root
     .querySelector('[data-mini-action="toggle"]')
     ?.addEventListener('click', () => void player.toggle());

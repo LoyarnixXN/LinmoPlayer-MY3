@@ -49,7 +49,7 @@ export const state = {
   playlists: load('playlists', []).filter((playlist) => Array.isArray(playlist?.songs)),
   remotePlaylists: load('remote-playlists', []),
   recents: load('recents', []),
-  plugins: load('plugins', []),
+  plugins: loadPlugins(),
   searchResults: [],
   searchFailures: [],
   searchQuery: '',
@@ -93,6 +93,50 @@ if (!QUALITIES.some(([id]) => id === state.settings.quality)) state.settings.qua
 
 /** Last playback position per song key, for resume-on-replay. */
 export const playbackMemory = load('playback-memory', {});
+
+/** Older builds seeded a built-in online source; those records must not survive upgrades. */
+const LEGACY_BUILTIN_PLUGIN_IDS = new Set(['linmo.netease']);
+
+export function isLegacyBuiltinPlugin(plugin) {
+  if (!plugin || typeof plugin !== 'object') return true;
+  if (plugin.builtin === true) return true;
+  const id = String(plugin.id ?? '');
+  if (LEGACY_BUILTIN_PLUGIN_IDS.has(id)) return true;
+  // Historical seeds: any linmo.* music-source still marked as built-in style.
+  if (id.startsWith('linmo.') && plugin.provider === 'netease-api') return true;
+  return false;
+}
+
+function loadPlugins() {
+  const raw = load('plugins', []);
+  const list = Array.isArray(raw) ? raw : [];
+  const cleaned = list.filter((plugin) => !isLegacyBuiltinPlugin(plugin));
+  if (cleaned.length !== list.length) {
+    for (const plugin of list) {
+      if (isLegacyBuiltinPlugin(plugin) && plugin && plugin.id) {
+        purgePluginStorageKey(String(plugin.id));
+      }
+    }
+    save('plugins', cleaned);
+    purgeLegacyPluginStorage();
+  }
+  return cleaned;
+}
+
+function purgePluginStorageKey(pluginId) {
+  const prefix = `linmo.pluginStorage.${pluginId}.`;
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith(prefix)) localStorage.removeItem(key);
+  }
+}
+
+/** Drop localStorage keys written by removed built-in plugins. */
+export function purgeLegacyPluginStorage() {
+  for (const id of LEGACY_BUILTIN_PLUGIN_IDS) purgePluginStorageKey(id);
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('linmo.pluginStorage.linmo.')) localStorage.removeItem(key);
+  }
+}
 
 export const persisters = {
   library: () => save('library', state.songs),

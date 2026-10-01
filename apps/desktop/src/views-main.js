@@ -276,7 +276,15 @@ export function renderHome() {
         .slice(0, 6)
         .map((song, index) => songRow(song, state.songs, index))
         .join('')}</div>`
-    : `<div class="empty-state">${icon('music', 'empty-icon')}<h2>开始使用 Linmo Player</h2><p>导入本地音频文件，或启用音源插件后在线搜索播放。</p></div>`;
+    : `<div class="empty-state home-empty">
+        ${icon('musicNote', 'empty-icon')}
+        <h2>开始使用 Linmo Player</h2>
+        <p>导入本地音频文件，或启用音源插件后在线搜索播放。</p>
+        <div class="quick-actions empty-actions">
+          <button type="button" class="tonal-button ripple" id="home-empty-import">${icon('add', 'button-icon')}导入音乐</button>
+          <button type="button" class="tonal-button ripple" id="home-empty-folder">${icon('folder', 'button-icon')}导入文件夹</button>
+        </div>
+      </div>`;
   root.innerHTML = `<div class="hero">
       <div class="hero-copy">
         <div class="eyebrow">LINMO PLAYER</div>
@@ -289,6 +297,8 @@ export function renderHome() {
     ${recents}${recommendations}${library}`;
   qs('#home-import', root)?.addEventListener('click', () => void importAudioFiles());
   qs('#home-folder', root)?.addEventListener('click', () => void importAudioFolder());
+  qs('#home-empty-import', root)?.addEventListener('click', () => void importAudioFiles());
+  qs('#home-empty-folder', root)?.addEventListener('click', () => void importAudioFolder());
   qs('#home-shuffle', root)?.addEventListener('click', () => {
     if (!state.songs.length) return;
     const shuffled = [...state.songs].sort(() => Math.random() - 0.5);
@@ -368,7 +378,7 @@ export function renderLibrary() {
 
 function renderSongsTab() {
   if (!state.songs.length)
-    return `<div class="empty-state">${icon('music', 'empty-icon')}<h2>音乐库还是空的</h2><p>导入本地音频文件后将在此显示，支持 MP3、FLAC、M4A 等格式。</p></div>`;
+    return `<div class="empty-state">${icon('musicNote', 'empty-icon')}<h2>音乐库还是空的</h2><p>导入本地音频文件后将在此显示，支持 MP3、FLAC、M4A 等格式。</p></div>`;
   const formats = [...new Set(state.songs.map((song) => song.format).filter(Boolean))].join(' · ');
   return `<div class="library-stats"><div class="library-stat"><strong>${state.songs.length}</strong><span>曲目</span></div><div class="library-stat"><strong>${formats || '—'}</strong><span>格式</span></div></div><div class="song-list">${state.songs
     .map((song, index) => songRow(song, state.songs, index))

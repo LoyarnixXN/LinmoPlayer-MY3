@@ -15,6 +15,7 @@ import {
 } from './state.js';
 import {
   bootPlugins,
+  migrateLegacyBuiltinPlugins,
   refreshAccount,
   accountLogout,
   syncRemotePlaylists,
@@ -350,6 +351,10 @@ function bindShell() {
 async function boot() {
   installRipple();
   bindShell();
+
+  // 旧版本内置插件必须在首次渲染前清理，避免首页短暂显示「1 个启用插件」。
+  await migrateLegacyBuiltinPlugins();
+
   initPlayerView();
   renderMiniPlayer();
   renderAccount();

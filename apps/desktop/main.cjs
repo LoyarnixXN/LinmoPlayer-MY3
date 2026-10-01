@@ -648,8 +648,26 @@ ipcMain.on('window:toggle-maximize', (event) => {
 });
 ipcMain.on('window:close', (event) => windowFromEvent(event)?.close());
 
+/** Older builds installed a built-in online source; wipe it on upgrade boots. */
+function cleanupLegacyBuiltinPlugins() {
+  const legacyIds = ['linmo.netease'];
+  for (const id of legacyIds) {
+    if (!/^[a-z0-9][a-z0-9._-]{1,63}$/.test(id)) continue;
+    const directory = path.join(pluginsRoot(), id);
+    try {
+      if (fs.existsSync(directory)) {
+        stopPluginService(id);
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
+  cleanupLegacyBuiltinPlugins();
   protocol.handle('linmo-media', handleMediaProtocol);
   // Keep loopback/lan addresses (self-hosted NeteaseCloudMusicApi proxy) off the
   // system proxy; external sources keep following the system configuration.
