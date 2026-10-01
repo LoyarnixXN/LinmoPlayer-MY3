@@ -1305,6 +1305,16 @@
   function localMediaUrl(song) {
     return `file:///${String(song.mediaUri).replaceAll("\\", "/")}`;
   }
+  function friendlyNetError(message) {
+    const text = String(message);
+    if (/ERR_CONNECTION_REFUSED/i.test(text))
+      return "\u65E0\u6CD5\u8FDE\u63A5\u5230\u97F3\u6E90\u4EE3\u7406\u670D\u52A1\uFF1A\u8BF7\u786E\u8BA4\u4EE3\u7406\u5DF2\u542F\u52A8\uFF08\u7F51\u6613\u4E91\u9ED8\u8BA4\u7AEF\u53E3 3000\uFF09\uFF0C\u670D\u52A1\u5730\u5740\u53EF\u5728\u63D2\u4EF6\u4E2D\u5FC3\u4FEE\u6539\u3002";
+    if (/ERR_CONNECTION_RESET|ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED/i.test(text))
+      return "\u7F51\u7EDC\u8FDE\u63A5\u4E0D\u53EF\u7528\u6216\u88AB\u91CD\u7F6E\uFF1A\u8BF7\u68C0\u67E5\u7F51\u7EDC\u4E0E\u4EE3\u7406\u8BBE\u7F6E\u540E\u91CD\u8BD5\u3002";
+    if (/ERR_TIMED_OUT|AbortError|超时/i.test(text)) return "\u8FDE\u63A5\u8D85\u65F6\uFF1A\u4EE3\u7406\u670D\u52A1\u54CD\u5E94\u8FC7\u6162\u6216\u4E0D\u53EF\u8FBE\u3002";
+    if (/ERR_NAME_NOT_RESOLVED/i.test(text)) return "\u57DF\u540D\u65E0\u6CD5\u89E3\u6790\uFF1A\u8BF7\u68C0\u67E5\u670D\u52A1\u5730\u5740\u662F\u5426\u6B63\u786E\u3002";
+    return text;
+  }
   async function callPlugin(pluginId, capability, operation) {
     const record = registry.get(pluginId);
     if (!record || record.status === "disabled")
@@ -1314,7 +1324,10 @@
     try {
       return { ok: true, value: await operation(record.plugin) };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : "\u63D2\u4EF6\u8C03\u7528\u5931\u8D25\u3002" };
+      return {
+        ok: false,
+        error: friendlyNetError(error instanceof Error ? error.message : "\u63D2\u4EF6\u8C03\u7528\u5931\u8D25\u3002")
+      };
     }
   }
   async function fetchLyrics(song) {
@@ -2353,7 +2366,7 @@
         img.src = url;
         img.alt = "";
         img.loading = "lazy";
-        img.addEventListener("error", () => img.remove());
+        img.onerror = () => img.remove();
         coverEl.classList.add("cover-image");
         coverEl.appendChild(img);
         return true;
@@ -3282,7 +3295,7 @@
         const img = document.createElement("img");
         img.src = url;
         img.alt = "";
-        img.addEventListener("error", () => img.remove());
+        img.onerror = () => img.remove();
         el.classList.add("cover-image");
         el.appendChild(img);
       })();

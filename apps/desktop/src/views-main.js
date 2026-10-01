@@ -33,7 +33,7 @@ export function hydrateCovers(container, list, rowAttr = 'data-row-index') {
       img.src = url;
       img.alt = '';
       img.loading = 'lazy';
-      img.addEventListener('error', () => img.remove());
+      img.onerror = () => img.remove();
       coverEl.classList.add('cover-image');
       coverEl.appendChild(img);
       return true;

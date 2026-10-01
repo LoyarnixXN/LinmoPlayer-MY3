@@ -40,23 +40,12 @@ npm run build:windows
 
 ## 插件
 
-插件是包含 `plugin.json` 的 ZIP 文件。音源插件使用宿主内置 provider：
+插件是包含 `plugin.json` 的 ZIP 文件，在应用的“插件中心”导入。音源插件使用宿主内置 provider：
 
 - `gdstudio`：GD Studio 多音源搜索、播放和歌词
 - `netease-api`：NeteaseCloudMusicApi 登录（扫码/密码）、歌单、搜索、播放、歌词和每日推荐
 
-网易云音乐音源已作为内置声明式插件预置（无需导入），默认连接 `http://127.0.0.1:3000`，可在插件中心卡片中修改服务地址；`plugins-local/netease-cloud-music` 的 ZIP 打包方式同样可用。
-
-打包本地示例：
-
-```bash
-node tools/pack-plugin.mjs plugins-local/linmo-multisource
-node tools/pack-plugin.mjs plugins-local/netease-cloud-music
-node tools/pack-plugin.mjs plugins-local/theme-midnight
-node tools/pack-plugin.mjs plugins-local/font-inter
-```
-
-生成的 ZIP 位于对应插件目录的 `dist/` 下，然后在应用的“插件中心”导入。网易云插件默认连接 `http://127.0.0.1:3000`，可在 `plugin.json` 的 `config.baseUrl` 中改为自己的代理地址。
+插件包不随本仓库分发，请自行打包或获取；`tools/pack-plugin.mjs` 可将任意插件目录压成 ZIP。
 
 完整字段、能力列表和校验规则见[插件契约](./docs/plugin-contract.md)。
 
@@ -65,7 +54,7 @@ node tools/pack-plugin.mjs plugins-local/font-inter
 ```text
 apps/desktop      Electron 桌面端宿主
 packages/core     共享核心包
-plugins-local     声明式插件示例
+tools             插件打包工具
 tools             插件打包工具
 docs              架构、契约、设计和路线图
 ```

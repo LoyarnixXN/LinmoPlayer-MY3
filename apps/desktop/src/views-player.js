@@ -100,7 +100,7 @@ export function renderNowPlaying() {
       const img = document.createElement('img');
       img.src = url;
       img.alt = '';
-      img.addEventListener('error', () => img.remove());
+      img.onerror = () => img.remove();
       el.classList.add('cover-image');
       el.appendChild(img);
     })();

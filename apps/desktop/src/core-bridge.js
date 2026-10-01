@@ -131,6 +131,18 @@ export function localMediaUrl(song) {
   return `file:///${String(song.mediaUri).replaceAll('\\', '/')}`;
 }
 
+/** Translate raw network failures into actionable Chinese guidance. */
+function friendlyNetError(message) {
+  const text = String(message);
+  if (/ERR_CONNECTION_REFUSED/i.test(text))
+    return '无法连接到音源代理服务：请确认代理已启动（网易云默认端口 3000），服务地址可在插件中心修改。';
+  if (/ERR_CONNECTION_RESET|ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED/i.test(text))
+    return '网络连接不可用或被重置：请检查网络与代理设置后重试。';
+  if (/ERR_TIMED_OUT|AbortError|超时/i.test(text)) return '连接超时：代理服务响应过慢或不可达。';
+  if (/ERR_NAME_NOT_RESOLVED/i.test(text)) return '域名无法解析：请检查服务地址是否正确。';
+  return text;
+}
+
 /**
  * Guarded plugin call that does NOT poison the plugin status on failure:
  * transient network errors (proxy down, timeout) surface as call results and
@@ -145,7 +157,10 @@ async function callPlugin(pluginId, capability, operation) {
   try {
     return { ok: true, value: await operation(record.plugin) };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : '插件调用失败。' };
+    return {
+      ok: false,
+      error: friendlyNetError(error instanceof Error ? error.message : '插件调用失败。'),
+    };
   }
 }
 
