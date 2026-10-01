@@ -5,16 +5,17 @@
 - [x] 项目文档与目录结构
 - [x] 统一歌曲/歌单模型
 - [x] 插件契约、注册表和异常隔离抽象
-- [x] Material 3 移动端 UI 基线
-- [x] 真机音频适配器（expo-audio）
+- [x] Material 3 UI 基线（桌面端）
 
-## Phase 1 — 本体可用
+## Phase 1 — 桌面端本体可用
 
-- [x] 本地音频文件导入与基础播放
-- [ ] 播放队列、进度记忆和后台播放
-- [x] AsyncStorage/设备文件存储适配器
-- [ ] 歌单创建、编辑、排序与离线查看
-- [ ] Now Playing、歌词容器和播放通知
+- [x] 本地音频文件/文件夹导入与基础播放
+- [x] localStorage / userData 存储适配器
+- [x] 播放队列与播放模式（顺序/列表循环/随机/单曲循环）
+- [ ] 进度记忆
+- [x] 歌单创建、编辑与播放
+- [x] Now Playing 与同步歌词
+- [ ] 系统媒体控制与桌面通知
 
 ## Phase 2 — 插件管理与运行时安全
 
@@ -28,9 +29,11 @@
 
 - [x] GD Studio 多音源 provider
 - [x] NeteaseCloudMusicApi 账号 provider
+- [x] 多源聚合搜索与播放补全
+- [x] 网易云扫码登录（内置声明式插件预置）
 
 ## Phase 4 — 多平台
 
 - [x] 桌面壳适配
 - [x] 复用 `packages/core`（esbuild vendor bundle）
-- [ ] 跨端播放队列与本地数据迁移
+- [ ] 跨平台壳（未来）

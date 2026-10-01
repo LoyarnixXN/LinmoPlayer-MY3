@@ -70,6 +70,9 @@ interface RawLyricResult {
 
 const EXTRA_PREFIX = 'gdstudio:';
 
+/** Cover URLs resolved via `types=pic`, cached per source:picId ('' => none). */
+const picCache = new Map<string, string | null>();
+
 export function readGdStudioMeta(song: UnifiedSong, pluginId: string): GdStudioSongMeta | null {
   const extra = song.extra?.[`${EXTRA_PREFIX}${pluginId}`] as GdStudioSongMeta | undefined;
   if (!extra || typeof extra.source !== 'string' || typeof extra.id !== 'string') return null;
@@ -94,6 +97,25 @@ export function createGdStudioMusicPlugin(options: GdStudioEngineOptions): Music
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) throw new Error(`音源接口请求失败（HTTP ${response.status}）。`);
       return (await response.json()) as T;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError')
+        throw new Error('音源接口请求超时。');
+      throw error instanceof Error ? error : new Error('无法连接音源接口。');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** The `types=pic` endpoint answers with a plain-text image URL. */
+  async function requestText(params: Record<string, string | number>): Promise<string> {
+    const url = new URL(baseUrl);
+    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`音源接口请求失败（HTTP ${response.status}）。`);
+      return (await response.text()).trim().replace(/^"|"$/g, '');
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError')
         throw new Error('音源接口请求超时。');
@@ -208,6 +230,36 @@ export function createGdStudioMusicPlugin(options: GdStudioEngineOptions): Music
         ...(raw.tlyric ? { translatedLyric: raw.tlyric } : {}),
         synced: (raw.lyric ?? '').includes('['),
       };
+    },
+
+    async getCover(song: UnifiedSong): Promise<string | null> {
+      const meta = readGdStudioMeta(song, pluginId);
+      const picId = meta?.picId;
+      if (!picId) return null;
+      const cacheKey = `${meta.source}:${picId}`;
+      const cached = picCache.get(cacheKey);
+      if (cached !== undefined) return cached;
+      const raw = await requestText({
+        types: 'pic',
+        source: meta.source,
+        id: picId,
+        size: 300,
+      });
+      // Deployments answer either a plain URL or {"url": "..."}.
+      let cover: string | null = null;
+      if (raw.startsWith('{')) {
+        try {
+          cover = (JSON.parse(raw) as { url?: string }).url ?? null;
+        } catch {
+          cover = null;
+        }
+      } else if (/^https?:\/\//.test(raw)) {
+        cover = raw;
+      }
+      // Only definite outcomes are cached; requestText throws on network
+      // errors, which keeps those retryable for the next hydration pass.
+      picCache.set(cacheKey, cover);
+      return cover;
     },
   };
 }

@@ -4,7 +4,7 @@ Linmo Player 的界面遵循 Material 3 的层级、圆角、动态色和状态�
 
 ## 设计原则
 
-- 移动端优先：单手可触达，底部导航承载一级导航；
+- 桌面优先：左侧导航栏承载一级导航，内容区保持宽松的呼吸感；
 - 内容优先：封面、歌名、艺术家和播放状态比装饰更重要；
 - 表面分层：使用 `surface`、`surfaceContainer`、`surfaceContainerHigh` 表达层次，不依赖重阴影；
 - 大圆角但不滥用：卡片 24dp，按钮 16dp，药丸标签 999dp；
@@ -13,17 +13,17 @@ Linmo Player 的界面遵循 Material 3 的层级、圆角、动态色和状态�
 
 ## 第一版 token
 
-| token | light value | 用途 |
-| --- | --- | --- |
-| `primary` | `#6750A4` | 主行动、选中状态 |
-| `onPrimary` | `#FFFFFF` | 主色上的文字 |
-| `secondaryContainer` | `#E8DEF8` | 次级操作背景 |
-| `surface` | `#FFFBFE` | 页面背景 |
-| `surfaceContainer` | `#F3EDF7` | 卡片与导航容器 |
-| `surfaceContainerHigh` | `#ECE6F0` | 抬升的卡片、底部播放器 |
-| `onSurface` | `#1D1B20` | 主文字 |
-| `onSurfaceVariant` | `#49454F` | 次要文字 |
-| `outline` | `#79747E` | 边界与分割 |
+| token                  | light value | 用途                   |
+| ---------------------- | ----------- | ---------------------- |
+| `primary`              | `#6750A4`   | 主行动、选中状态       |
+| `onPrimary`            | `#FFFFFF`   | 主色上的文字           |
+| `secondaryContainer`   | `#E8DEF8`   | 次级操作背景           |
+| `surface`              | `#FFFBFE`   | 页面背景               |
+| `surfaceContainer`     | `#F3EDF7`   | 卡片与导航容器         |
+| `surfaceContainerHigh` | `#ECE6F0`   | 抬升的卡片、底部播放器 |
+| `onSurface`            | `#1D1B20`   | 主文字                 |
+| `onSurfaceVariant`     | `#49454F`   | 次要文字               |
+| `outline`              | `#79747E`   | 边界与分割             |
 
 暗色主题只允许在主题层替换 token，组件不写死黑白背景。
 

@@ -23,6 +23,20 @@
 主题包使用 `kind: "theme"` 与 `theme.entry` 指向 JSON；字体包使用 `kind: "font"` 与
 `font: { "family", "file" }` 指向字体文件。当前支持的 provider 是 `gdstudio` 和 `netease-api`。
 
+## 扫码登录（account 能力的扩展方法）
+
+音源插件的登录流程由宿主内置 provider 实现，插件只声明 `provider` 与 `config.baseUrl`。
+支持扫码登录的 provider 在 `account` 能力下额外提供两个可选方法：
+
+- `qrLoginStart(): Promise<QrLoginTicket>` — 发起扫码会话，返回 `qrDataUri`（可直接渲染的
+  二维码图片 data URI）或 `qrUrl`（二维码内容，宿主自行渲染）；
+- `qrLoginCheck(): Promise<QrLoginPollResult>` — 轮询一次扫码状态，`state` 取
+  `waiting / scanned / authorized / expired`，`authorized` 时附带 `user` 并由 provider
+  持久化 Cookie。
+
+宿主 UI 通常每 2 秒轮询一次，过期后引导用户刷新二维码。网易云 provider 走
+NeteaseCloudMusicApi 的 `/login/qr/key → /login/qr/create → /login/qr/check` 流程。
+
 ## 宿主必须保证
 
 - 插件失败不影响宿主和其他插件；
@@ -86,7 +100,7 @@ export default plugin;
 
 1. manifest 签名和来源校验；
 2. 权限清单和最小能力上下文；
-3. 移动端 JS 沙箱与超时机制；
+3. 运行时 JS 沙箱与超时机制；
 4. 包完整性校验和回滚；
 5. 插件日志脱敏与用户可见诊断。
 

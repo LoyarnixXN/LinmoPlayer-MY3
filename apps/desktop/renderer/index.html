@@ -1,84 +1,227 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-mode="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://* http://* data: blob:; media-src 'self' https://* http://* file: blob: linmo-media:; font-src 'self' data: blob:; connect-src 'self' https://* http://*"
+    />
     <title>Linmo Player</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand"><span class="brand-mark">L</span><span>Linmo</span></div>
-        <div class="sidebar-label">菜单</div>
-        <nav id="main-nav" class="main-nav" aria-label="主导航">
-          <button class="nav-item active" data-page="home">
-            <span class="nav-icon" data-icon="home" aria-hidden="true"></span>本地音乐
+      <aside class="nav-rail">
+        <div class="brand">
+          <span class="brand-mark">L</span>
+          <span class="brand-name">Linmo</span>
+        </div>
+        <nav class="rail-nav" aria-label="主导航">
+          <button class="nav-item is-active ripple" data-page="home" type="button">
+            <span class="nav-icon" data-icon="home" aria-hidden="true"></span>
+            <span class="nav-label">首页</span>
           </button>
-          <button class="nav-item" data-page="library">
-            <span class="nav-icon" data-icon="library" aria-hidden="true"></span>音乐库
+          <button class="nav-item ripple" data-page="search" type="button">
+            <span class="nav-icon" data-icon="search" aria-hidden="true"></span>
+            <span class="nav-label">搜索</span>
           </button>
-          <button class="nav-item" data-page="plugins">
-            <span class="nav-icon" data-icon="plugins" aria-hidden="true"></span>插件中心
+          <button class="nav-item ripple" data-page="library" type="button">
+            <span class="nav-icon" data-icon="library" aria-hidden="true"></span>
+            <span class="nav-label">音乐库</span>
           </button>
-          <button class="nav-item" data-page="settings">
-            <span class="nav-icon" data-icon="settings" aria-hidden="true"></span>应用设置
+          <button class="nav-item ripple" data-page="plugins" type="button">
+            <span class="nav-icon" data-icon="plugins" aria-hidden="true"></span>
+            <span class="nav-label">插件</span>
+          </button>
+          <button class="nav-item ripple" data-page="settings" type="button">
+            <span class="nav-icon" data-icon="settings" aria-hidden="true"></span>
+            <span class="nav-label">设置</span>
           </button>
         </nav>
       </aside>
-      <div class="window-bar" aria-label="窗口控制栏">
-        <div class="window-drag-region"></div>
-        <div class="window-controls">
-          <button id="window-minimize" type="button" aria-label="最小化">
+
+      <div class="content-column">
+        <header class="title-bar">
+          <div class="window-drag-region"></div>
+          <div class="window-controls">
+            <button id="window-minimize" type="button" aria-label="最小化">
+              <span data-icon="minimize" aria-hidden="true"></span>
+            </button>
+            <button id="window-maximize" type="button" aria-label="最大化或还原">
+              <span data-icon="maximize" aria-hidden="true"></span>
+            </button>
+            <button id="window-close" class="window-close" type="button" aria-label="关闭">
+              <span data-icon="close" aria-hidden="true"></span>
+            </button>
+          </div>
+        </header>
+
+        <header class="top-bar">
+          <h1 id="page-title">首页</h1>
+          <div class="top-bar-actions">
+            <button
+              id="theme-toggle"
+              class="icon-button ripple"
+              type="button"
+              aria-label="切换明暗模式"
+            >
+              <span data-icon="moon" aria-hidden="true"></span>
+            </button>
+            <div class="account-wrap">
+              <button
+                id="account-avatar"
+                class="avatar ripple"
+                type="button"
+                aria-label="账号菜单"
+                aria-expanded="false"
+              ></button>
+              <div id="account-menu" class="account-menu" hidden></div>
+            </div>
+          </div>
+        </header>
+
+        <main class="page-viewport" id="page-viewport">
+          <section id="page-home" class="page is-active page-enter"></section>
+          <section id="page-search" class="page">
+            <div class="search-bar">
+              <span class="search-icon" data-icon="search" aria-hidden="true"></span>
+              <input
+                id="search-input"
+                type="search"
+                placeholder="搜索歌曲、歌手或专辑，回车开始"
+                aria-label="搜索在线音乐"
+              />
+              <button id="search-submit" class="filled-button ripple" type="button">搜索</button>
+            </div>
+            <div id="search-chips" class="filter-row" hidden></div>
+            <div id="search-results"></div>
+          </section>
+          <section id="page-library" class="page"></section>
+          <section id="page-plugins" class="page"></section>
+          <section id="page-settings" class="page"></section>
+        </main>
+
+        <div id="mini-player" class="mini-player" role="region" aria-label="播放器"></div>
+      </div>
+    </div>
+
+    <div id="now-playing" class="now-playing" aria-hidden="true">
+      <header class="np-top">
+        <button
+          id="np-close"
+          class="icon-button ripple"
+          type="button"
+          aria-label="收起播放页"
+          title="收起播放页（Esc）"
+        >
+          <span data-icon="expand" aria-hidden="true"></span>
+        </button>
+        <div class="eyebrow">NOW PLAYING</div>
+        <span id="np-via" class="np-via" hidden></span>
+        <div class="window-controls np-window-controls">
+          <button id="np-minimize" type="button" aria-label="最小化">
             <span data-icon="minimize" aria-hidden="true"></span>
           </button>
-          <button id="window-maximize" type="button" aria-label="最大化或还原">
+          <button id="np-maximize" type="button" aria-label="最大化或还原">
             <span data-icon="maximize" aria-hidden="true"></span>
           </button>
-          <button id="window-close" class="window-close" type="button" aria-label="关闭">
+          <button id="np-close-window" type="button" class="window-close" aria-label="关闭">
             <span data-icon="close" aria-hidden="true"></span>
           </button>
         </div>
-      </div>
-      <main class="main-content" id="main-content">
-        <header class="topbar">
-          <div>
-            <div class="eyebrow">LINMO PLAYER</div>
-            <h1 id="page-subtitle">本地音乐</h1>
+      </header>
+      <div class="np-body">
+        <div class="np-left">
+          <div id="np-cover" class="np-cover"></div>
+          <h2 id="np-title">未选择歌曲</h2>
+          <p id="np-artist">导入或搜索音乐后开始播放</p>
+          <div class="np-progress-row">
+            <span id="np-current">0:00</span>
+            <input
+              id="np-progress"
+              class="m3-slider"
+              type="range"
+              min="0"
+              max="1000"
+              step="1"
+              value="0"
+              aria-label="播放进度"
+            />
+            <span id="np-duration">0:00</span>
           </div>
-          <div class="profile-wrap">
+          <div class="np-controls">
             <button
-              class="avatar"
-              id="profile-trigger"
+              id="np-mode"
+              class="player-control ripple"
               type="button"
-              aria-label="打开账户菜单"
-              aria-expanded="false"
-            >
-              ?
-            </button>
-            <div class="profile-menu" id="profile-menu" hidden></div>
+              aria-label="播放方式"
+            ></button>
+            <button
+              id="np-previous"
+              class="player-control ripple"
+              type="button"
+              aria-label="上一首"
+            ></button>
+            <button
+              id="np-play"
+              class="play-button ripple"
+              type="button"
+              aria-label="播放"
+            ></button>
+            <button
+              id="np-next"
+              class="player-control ripple"
+              type="button"
+              aria-label="下一首"
+            ></button>
+            <button
+              id="np-mute"
+              class="player-control ripple"
+              type="button"
+              aria-label="静音"
+            ></button>
+            <input
+              id="np-volume"
+              class="m3-slider volume-slider"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value="80"
+              aria-label="音量"
+            />
           </div>
-        </header>
-        <section id="page-home" class="page active"></section>
-        <section id="page-library" class="page"></section>
-        <section id="page-plugins" class="page"></section>
-        <section id="page-settings" class="page"></section>
-        <div class="mini-player" id="mini-player"></div>
-        <input id="audio-files" type="file" accept="audio/*" multiple hidden />
-        <input id="plugin-files" type="file" accept="application/zip,.zip" multiple hidden />
-      </main>
+        </div>
+        <div class="np-right">
+          <div class="np-tabs" role="tablist" aria-label="歌词与队列">
+            <button
+              id="np-tab-lyrics"
+              class="np-tab is-selected ripple"
+              type="button"
+              role="tab"
+              aria-selected="true"
+            >
+              歌词
+            </button>
+            <button
+              id="np-tab-queue"
+              class="np-tab ripple"
+              type="button"
+              role="tab"
+              aria-selected="false"
+            >
+              播放队列
+            </button>
+          </div>
+          <div id="np-lyrics" class="np-lyrics is-selected" role="tabpanel"></div>
+          <div id="np-queue" class="np-queue" role="tabpanel"></div>
+        </div>
+      </div>
     </div>
-    <div
-      class="scroll-rail"
-      id="scroll-rail"
-      role="scrollbar"
-      aria-label="页面滚动条"
-      aria-controls="main-content"
-      hidden
-    >
-      <span class="scroll-thumb" id="scroll-thumb"></span>
-    </div>
+
     <div id="onboarding" class="onboarding" hidden></div>
-    <script type="module" src="./renderer.js"></script>
+    <input id="plugin-files" type="file" accept="application/zip,.zip" multiple hidden />
+    <script type="module" src="./app.js"></script>
   </body>
 </html>

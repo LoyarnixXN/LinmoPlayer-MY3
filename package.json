@@ -11,8 +11,6 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "format:check": "prettier --check .",
-    "start:android": "npm run start --workspace @linmo/mobile",
-    "build:android": "npm run build:android --workspace @linmo/mobile",
     "start:windows": "npm run start --workspace @linmo/desktop",
     "build:windows": "npm run build --workspace @linmo/desktop"
   },

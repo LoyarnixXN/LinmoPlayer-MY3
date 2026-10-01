@@ -9,9 +9,14 @@ contextBridge.exposeInMainWorld('linmoDesktop', {
     close: () => ipcRenderer.send('window:close'),
   },
   plugins: {
-    readPackage: (bytes) => ipcRenderer.invoke('plugin:read-package', bytes),
-    extractFiles: (bytes) => ipcRenderer.invoke('plugin:extract-files', bytes),
+    install: (bytes) => ipcRenderer.invoke('plugin:install', bytes),
+    readFile: (pluginId, fileName) =>
+      ipcRenderer.invoke('plugin:read-file', { pluginId, fileName }),
+    uninstall: (pluginId) => ipcRenderer.invoke('plugin:uninstall', pluginId),
   },
   net: { fetch: (input) => ipcRenderer.invoke('net:fetch', input) },
-  library: { pickAudio: () => ipcRenderer.invoke('library:pick-audio') },
+  library: {
+    pickAudio: () => ipcRenderer.invoke('library:pick-audio'),
+    pickFolder: () => ipcRenderer.invoke('library:pick-folder'),
+  },
 });

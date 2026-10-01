@@ -85,6 +85,23 @@ export interface PluginLoginRequest {
   readonly countryCode?: string;
 }
 
+export type QrLoginState = 'waiting' | 'scanned' | 'authorized' | 'expired';
+
+/** Initial ticket of a QR login session. */
+export interface QrLoginTicket {
+  /** Renderable QR image as a data URI; hosts should show it directly when present. */
+  readonly qrDataUri?: string;
+  /** Raw QR content; fallback for hosts that render their own QR code. */
+  readonly qrUrl?: string;
+}
+
+/** One poll result of a QR login session. */
+export interface QrLoginPollResult {
+  readonly state: QrLoginState;
+  /** Present when `state` is `'authorized'`. */
+  readonly user?: PluginUser;
+}
+
 export interface PluginContext {
   readonly sourceId: SourceId;
   readonly storage: PluginStorage;
@@ -104,6 +121,8 @@ export interface MusicPlugin {
   search?(request: SearchRequest): Promise<SearchResponse>;
   resolvePlayback?(song: UnifiedSong, quality: PlaybackQuality): Promise<PlaybackResource>;
   getLyrics?(song: UnifiedSong): Promise<LyricDocument>;
+  /** Resolve a display cover URL for a song; hosts cache results. */
+  getCover?(song: UnifiedSong): Promise<string | null>;
   listUserPlaylists?(): Promise<readonly PluginPlaylist[]>;
   listPlaylistSongs?(
     playlist: PluginPlaylist,
@@ -114,6 +133,10 @@ export interface MusicPlugin {
   login?(request: PluginLoginRequest): Promise<PluginUser>;
   logout?(): Promise<void>;
   isAuthenticated?(): Promise<boolean>;
+  /** Begin a QR-code login session; the session key stays on the plugin instance. */
+  qrLoginStart?(): Promise<QrLoginTicket>;
+  /** Poll the QR session once; hosts typically poll every ~2 seconds. */
+  qrLoginCheck?(): Promise<QrLoginPollResult>;
   getRecommendations?(): Promise<readonly PluginSong[]>;
   /** Sources exposed by a multi-source plugin, in fallback priority order. */
   listSources?(): Promise<readonly string[]>;

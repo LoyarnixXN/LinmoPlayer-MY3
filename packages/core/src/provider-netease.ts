@@ -5,6 +5,8 @@ import type {
   PluginPlaylist,
   PluginSong,
   PluginUser,
+  QrLoginPollResult,
+  QrLoginTicket,
   SearchRequest,
   SearchResponse,
 } from './plugin-contract';
@@ -71,6 +73,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
   let context: PluginContext | undefined;
   let cookie = '';
   let user: PluginUser | null = null;
+  let qrUnikey = '';
 
   async function persistSession(): Promise<void> {
     if (!context) return;
@@ -78,7 +81,11 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
     await context.storage.set(USER_KEY, user ? JSON.stringify(user) : '');
   }
 
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function request<T>(
+    path: string,
+    init: RequestInit = {},
+    { skipCodeCheck = false }: { skipCodeCheck?: boolean } = {},
+  ): Promise<T> {
     const url = new URL(`${baseUrl}${path}`);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -93,7 +100,10 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
       };
       if (
         !response.ok ||
-        (typeof payload.code === 'number' && payload.code !== 200 && payload.code !== 0)
+        (!skipCodeCheck &&
+          typeof payload.code === 'number' &&
+          payload.code !== 200 &&
+          payload.code !== 0)
       ) {
         throw new NeteaseApiError(
           payload.msg ?? payload.message ?? `网易云代理请求失败（HTTP ${response.status}）。`,
@@ -111,11 +121,15 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
     }
   }
 
-  function get<T>(path: string, query: Record<string, string | number> = {}): Promise<T> {
+  function get<T>(
+    path: string,
+    query: Record<string, string | number> = {},
+    options: { skipCodeCheck?: boolean } = {},
+  ): Promise<T> {
     const search = new URLSearchParams(
       Object.entries(query).map(([key, value]) => [key, String(value)]),
     ).toString();
-    return request<T>(`${path}${search ? `?${search}` : ''}`);
+    return request<T>(`${path}${search ? `?${search}` : ''}`, {}, options);
   }
 
   function post<T>(path: string, body: Record<string, string>): Promise<T> {
@@ -150,7 +164,7 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
       name: '网易云音乐账号',
       version: '1.0.0',
       hostApiVersion: '1',
-      capabilities: ['account', 'playlists', 'search', 'playback', 'lyrics'],
+      capabilities: ['account', 'playlists', 'search', 'playback', 'lyrics', 'recommendations'],
     },
 
     async initialize(pluginContext) {
@@ -211,6 +225,45 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
       } catch {
         return false;
       }
+    },
+
+    async qrLoginStart(): Promise<QrLoginTicket> {
+      const keyResponse = await get<{ data?: { unikey?: string }; unikey?: string }>(
+        '/login/qr/key',
+        { timestamp: Date.now() },
+      );
+      const unikey = keyResponse.data?.unikey ?? keyResponse.unikey;
+      if (!unikey) throw new NeteaseApiError('获取扫码登录密钥失败。');
+      qrUnikey = unikey;
+      const createResponse = await get<{ data?: { qrurl?: string; qrimg?: string } }>(
+        '/login/qr/create',
+        { key: unikey, qrimg: 'true', timestamp: Date.now() },
+      );
+      const qrUrl = createResponse.data?.qrurl;
+      const qrDataUri = createResponse.data?.qrimg;
+      if (!qrDataUri && !qrUrl) throw new NeteaseApiError('获取登录二维码失败。');
+      return { ...(qrDataUri ? { qrDataUri } : {}), ...(qrUrl ? { qrUrl } : {}) };
+    },
+
+    async qrLoginCheck(): Promise<QrLoginPollResult> {
+      if (!qrUnikey) throw new NeteaseApiError('请先获取登录二维码。');
+      const response = await get<{
+        code?: number;
+        data?: { code?: number };
+        cookie?: string;
+      }>('/login/qr/check', { key: qrUnikey, timestamp: Date.now() }, { skipCodeCheck: true });
+      const stateCode = response.data?.code ?? response.code;
+      if (stateCode === 803) {
+        cookie = response.cookie ?? '';
+        if (!cookie) throw new NeteaseApiError('扫码已确认，但代理没有返回登录凭据。');
+        user = null;
+        const refreshed = await this.getUser?.();
+        await persistSession();
+        return { state: 'authorized', ...(refreshed ? { user: refreshed } : {}) };
+      }
+      if (stateCode === 800) return { state: 'expired' };
+      if (stateCode === 802) return { state: 'scanned' };
+      return { state: 'waiting' };
     },
 
     async getUser() {
@@ -288,6 +341,21 @@ export function createNeteaseAccountMusicPlugin(options: NeteaseEngineOptions): 
         ...(lyric.tlyric?.lyric ? { translatedLyric: lyric.tlyric.lyric } : {}),
         synced: (lyric.lrc?.lyric ?? '').includes('['),
       };
+    },
+
+    async getCover(song: UnifiedSong): Promise<string | null> {
+      return song.coverUrl ?? null;
+    },
+
+    async getRecommendations(): Promise<readonly PluginSong[]> {
+      const currentUser = user ?? (await this.getUser?.());
+      if (!currentUser) throw new NeteaseApiError('尚未登录网易云账号。');
+      const response = await get<{ data?: { dailySongs?: readonly NeteaseSong[] } }>(
+        '/recommend/songs',
+      );
+      return (response.data?.dailySongs ?? [])
+        .filter((song) => song.id !== undefined && song.name !== undefined)
+        .map(toPluginSong);
     },
 
     async listUserPlaylists(): Promise<readonly PluginPlaylist[]> {
